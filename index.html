@@ -83,6 +83,7 @@ if(!$('uA').value)$('uA').value='https://romco.nightscoutpro.com';
 if(!$('uB').value)$('uB').value='https://romankrajcovic.nightscoutpro.com';
 if(q.get('edit'))$('adm').style.display='block';
 const MG=18.0182;
+const MIN_FROM=Date.UTC(2026,10,6,21,0,0); // 6.11.2026 22:00 SEČ = 21:00 UTC
 const toU=v=>$('unit').value==='mmol'?v/MG:v;
 const fmt=v=>$('unit').value==='mmol'?v.toFixed(1):Math.round(v);
 const sg=v=>(v>=0?'+':'')+fmt(v);
@@ -181,7 +182,7 @@ function pairStats(act,data,blood){
 }
 async function tick(){
  try{
-  const from=Date.now()-$('hrs').value*3600e3;
+  const from=Math.max(Date.now()-$('hrs').value*3600e3,MIN_FROM); // nič staršie ako 6.11.2026 22:00 (SEČ)
   const act=active();
   const raw={},errs=[];
   if($('mode').value==='two'){
