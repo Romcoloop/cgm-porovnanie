@@ -41,7 +41,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 7.11. 08:25</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 7.11. 09:40</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="st"></div>
@@ -96,7 +96,7 @@ function mk(){
  const act=active();
  if(chart)chart.destroy();
  const ds=act.map(s=>({label:s.name,borderColor:s.color,backgroundColor:s.color,data:[],showLine:true,pointRadius:2,tension:.25,borderWidth:2}));
- ds.push({label:'Dexcom G6 – krv',borderColor:'#fff',backgroundColor:'#ff2d2d',borderWidth:2,data:[],showLine:false,pointStyle:'rectRot',pointRadius:8,pointHoverRadius:10});
+ ds.push({label:'Hodnota BG z kvapky krvi',borderColor:'#fff',backgroundColor:'#ff2d2d',borderWidth:2,data:[],showLine:false,pointStyle:'rectRot',pointRadius:8,pointHoverRadius:10});
  chart=new Chart($('ch'),{type:'scatter',data:{datasets:ds},
   options:{animation:false,maintainAspectRatio:false,parsing:false,
    scales:{x:{type:'linear',ticks:{color:'#9aa',callback:hm},grid:{color:'#223'}},
