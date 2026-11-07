@@ -79,8 +79,8 @@ const F=['mode','unit','hrs'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]
 const q=new URLSearchParams(location.search);
 let S={};try{S=JSON.parse(localStorage.getItem('cgm')||'{}')}catch(e){}
 F.forEach(f=>{if(q.get(f))S[f]=q.get(f);if(S[f]!=null)$(f).value=S[f]});
-if(!$('uA').value)$('uA').value='https://romco.nightscoutpro.com';
-if(!$('uB').value)$('uB').value='https://romankrajcovic.nightscoutpro.com';
+const PROXY='https://cgm-proxy.krajcovicroman.workers.dev';
+$('uA').value=PROXY+'/a';$('uB').value=PROXY+'/b'; // dáta idú cez worker, Nightscout nie je verejný
 if(q.get('edit'))$('adm').style.display='block';
 const MG=18.0182;
 const MIN_FROM=Date.UTC(2026,10,6,21,0,0); // 6.11.2026 22:00 SEČ = 21:00 UTC
@@ -115,8 +115,8 @@ function ns(u,k){ // zvládne URL s koncovým lomítkom, /api/..., ?token=..., b
  return{base:o.origin,tok:t?'&token='+encodeURIComponent(t):''};
 }
 async function get(u,k,from){
- const n=ns(u,k);if(!n)return[];
- const url=n.base+'/api/v1/entries/sgv.json?count='+Math.max(1000,Math.round(((Date.now()-from)/3600e3)*30))+'&find[date][$gte]='+from+n.tok;
+ const b=(u||'').trim().replace(/\/+$/,'');if(!b)return[];
+ const url=b+'/sgv?count='+Math.max(1000,Math.round(((Date.now()-from)/3600e3)*30))+'&from='+from;
  let r;try{r=await fetch(url)}catch(e){throw new Error('spojenie zlyhalo ('+e.message+')')}
  if(!r.ok)throw new Error('HTTP '+r.status);
  return r.json();
@@ -124,17 +124,16 @@ async function get(u,k,from){
 async function getBG(from){
  const one=$('mode').value==='one';
  const sid=one?'A':'B';
- const n=ns($('u'+sid).value,$('k'+sid).value);
- if(!n)return[];
- const base=n.base,tok=n.tok;
+ const base=($('u'+sid).value||'').trim().replace(/\/+$/,'');
+ if(!base)return[];
  const conv=g=>(+g<35?+g*MG:+g);
  const out=[];
  try{
-  const r=await fetch(base+'/api/v1/entries/mbg.json?count=200&find[date][$gte]='+from+tok);
+  const r=await fetch(base+'/mbg?count=200&from='+from);
   if(r.ok)(await r.json()).forEach(e=>{const v=+e.mbg;if(v>0)out.push({t:e.date||new Date(e.dateString).getTime(),mg:conv(v)})});
  }catch(e){}
  try{
-  const r=await fetch(base+'/api/v1/treatments.json?count=200&find[eventType]=BG%20Check&find[created_at][$gte]='+new Date(from).toISOString()+tok);
+  const r=await fetch(base+'/bg?count=200&from='+from);
   if(r.ok)(await r.json()).forEach(t=>{const v=+t.glucose;if(v>0){const m=/mmol/i.test(t.units||'');out.push({t:new Date(t.created_at||t.timestamp).getTime(),mg:m?v*MG:conv(v)})}});
  }catch(e){}
  out.sort((p,q)=>p.t-q.t);
@@ -197,7 +196,7 @@ async function tick(){
    const arr=raw[s.id].filter(e=>e.sgv>0).map(e=>({x:e.date,y:toU(e.sgv)})).sort((a,b)=>a.x-b.x);
    data[s.id]=arr.filter((p,i)=>!i||p.x-arr[i-1].x>60e3); // duplicity (dva uploadery)
   });
-  if(act.length>1&&$('mode').value==='two'){const a=ns($('uA').value,''),b=ns($('uB').value,'');if(a&&b&&a.base===b.base)errs.push('GS3 aj G6 majú nastavený rovnaký zdroj');}
+  if(act.length>1&&$('mode').value==='two'){const a=$('uA').value.trim(),b=$('uB').value.trim();if(a&&b&&a===b)errs.push('GS3 aj G6 majú nastavený rovnaký zdroj');}
   let blood=[];try{blood=await getBG(from)}catch(e){}
   const k=blood.map(p=>({x:p.t,y:toU(p.mg)}));
   act.forEach((s,i)=>chart.data.datasets[i].data=data[s.id]);
