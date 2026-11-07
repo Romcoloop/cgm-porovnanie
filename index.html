@@ -41,7 +41,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 7.11. 10:00</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 7.11. 10:20</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="st"></div>
@@ -51,12 +51,13 @@
  <div id="bList" style="font-size:13px;margin-top:8px"></div>
  <div id="bCmp" style="font-size:13px;margin-top:8px;color:#9aa"></div>
 </details>
-<details id="cfg"><summary>Nastavenia</summary>
+<details id="cfg" open><summary>Nastavenia</summary>
  <div class="r">
-  <div><label>Zobrazenie</label><select id="mode"><option value="two">Samostatné Nightscouty</option><option value="one">Jeden Nightscout (rozlíšenie podľa device)</option></select></div>
   <div><label>Jednotky</label><select id="unit"><option value="mmol">mmol/L</option><option value="mg">mg/dL</option></select></div>
   <div><label>Okno (hod.)</label><select id="hrs"><option>3</option><option selected>6</option><option>12</option><option>24</option><option>72</option><option>168</option></select></div>
  </div>
+ <div id="adm" style="display:none">
+  <div class="r"><div><label>Zobrazenie</label><select id="mode"><option value="two">Samostatné Nightscouty</option><option value="one">Jeden Nightscout (rozlíšenie podľa device)</option></select></div></div>
  <label>GS3 – URL Nightscoutu (napr. https://moje-gs3.herokuapp.com)</label><input id="uA">
  <label>GS3 – token (ak treba)</label><input id="kA">
  <label>G6 – URL Nightscoutu (v režime „jeden" nechaj prázdne)</label><input id="uB">
@@ -66,7 +67,7 @@
   <div><label>device G6</label><input id="dB" placeholder="xdrip"></div>
  </div>
  <button id="go" type="button" onclick="start()">Uložiť a spustiť</button>
- <div style="font-size:12px;color:#9aa;margin-top:8px">Nastavenia sa dajú dať aj do odkazu: <code>?uA=…&amp;kA=…&amp;uB=…&amp;unit=mmol&amp;hrs=6</code> – po otvorení odkazu sa schová panel nastavení.</div>
+ </div>
 </details>
 </div>
 <script>
@@ -80,7 +81,7 @@ let S={};try{S=JSON.parse(localStorage.getItem('cgm')||'{}')}catch(e){}
 F.forEach(f=>{if(q.get(f))S[f]=q.get(f);if(S[f]!=null)$(f).value=S[f]});
 if(!$('uA').value)$('uA').value='https://romco.nightscoutpro.com';
 if(!$('uB').value)$('uB').value='https://romankrajcovic.nightscoutpro.com';
-if(q.get('uA'))$('cfg').style.display='none';
+if(q.get('edit'))$('adm').style.display='block';
 const MG=18.0182;
 const toU=v=>$('unit').value==='mmol'?v/MG:v;
 const fmt=v=>$('unit').value==='mmol'?v.toFixed(1):Math.round(v);
@@ -213,7 +214,7 @@ function start(){
  $('st').textContent='Načítavam…';
  try{mk();clearInterval(timer);tick();timer=setInterval(tick,60000)}catch(e){$('st').textContent='Chyba: '+e.message}
 }
-$('go').onclick=start;
+$('go').onclick=start;$('unit').onchange=start;$('hrs').onchange=start;
 start();
 </script>
 </body></html>
