@@ -41,7 +41,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 7.11. 09:45</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 7.11. 10:00</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="st"></div>
@@ -55,7 +55,7 @@
  <div class="r">
   <div><label>Zobrazenie</label><select id="mode"><option value="two">Samostatné Nightscouty</option><option value="one">Jeden Nightscout (rozlíšenie podľa device)</option></select></div>
   <div><label>Jednotky</label><select id="unit"><option value="mmol">mmol/L</option><option value="mg">mg/dL</option></select></div>
-  <div><label>Okno (hod.)</label><select id="hrs"><option>3</option><option selected>6</option><option>12</option><option>24</option></select></div>
+  <div><label>Okno (hod.)</label><select id="hrs"><option>3</option><option selected>6</option><option>12</option><option>24</option><option>72</option><option>168</option></select></div>
  </div>
  <label>GS3 – URL Nightscoutu (napr. https://moje-gs3.herokuapp.com)</label><input id="uA">
  <label>GS3 – token (ak treba)</label><input id="kA">
@@ -86,6 +86,7 @@ const toU=v=>$('unit').value==='mmol'?v/MG:v;
 const fmt=v=>$('unit').value==='mmol'?v.toFixed(1):Math.round(v);
 const sg=v=>(v>=0?'+':'')+fmt(v);
 const hm=t=>new Date(t).toLocaleTimeString('sk',{hour:'2-digit',minute:'2-digit'});
+const hmd=t=>(+$('hrs').value>24?new Date(t).toLocaleDateString('sk',{day:'numeric',month:'numeric'})+' ':'')+hm(t);
 let chart,timer;
 function active(){
  const one=$('mode').value==='one';
@@ -99,7 +100,7 @@ function mk(){
  ds.push({label:'Hodnota BG z prsta',borderColor:'#fff',backgroundColor:'#ff2d2d',borderWidth:2,data:[],showLine:false,pointStyle:'rectRot',pointRadius:8,pointHoverRadius:10});
  chart=new Chart($('ch'),{type:'scatter',data:{datasets:ds},
   options:{animation:false,maintainAspectRatio:false,parsing:false,
-   scales:{x:{type:'linear',ticks:{color:'#9aa',callback:hm},grid:{color:'#223'}},
+   scales:{x:{type:'linear',ticks:{color:'#9aa',callback:hmd},grid:{color:'#223'}},
            y:{min:mm?2:40,max:mm?16:300,ticks:{color:'#9aa'},grid:{color:'#223'}}},
    plugins:{legend:{labels:{color:'#e6e6e6'}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y.toFixed(mm?1:0)+' @ '+new Date(c.parsed.x).toLocaleTimeString('sk')}}}}});
  $('cards').innerHTML=act.map(s=>'<div class="c"><small>'+s.name+'</small><b id="v'+s.id+'" style="color:'+s.color+'">–</b><small id="t'+s.id+'"></small>'+(s.id==='B'?'<small id="bB" style="display:block;margin-top:4px;color:#ff2d2d"></small>':'')+'</div>').join('');
@@ -113,7 +114,7 @@ function ns(u,k){ // zvládne URL s koncovým lomítkom, /api/..., ?token=..., b
 }
 async function get(u,k,from){
  const n=ns(u,k);if(!n)return[];
- const url=n.base+'/api/v1/entries/sgv.json?count=1000&find[date][$gte]='+from+n.tok;
+ const url=n.base+'/api/v1/entries/sgv.json?count='+Math.max(1000,Math.round(((Date.now()-from)/3600e3)*30))+'&find[date][$gte]='+from+n.tok;
  let r;try{r=await fetch(url)}catch(e){throw new Error('spojenie zlyhalo ('+e.message+')')}
  if(!r.ok)throw new Error('HTTP '+r.status);
  return r.json();
@@ -162,11 +163,17 @@ function pairStats(act,data,blood){
  if(blood.length){
   act.forEach(s=>{
    const d=[];for(const p of blood){const g=near(data[s.id],p.t,10*60e3);if(g)d.push([g.y,toU(p.mg)])}
-   if(d.length){
-    const mard=d.reduce((a,x)=>a+Math.abs(x[0]-x[1])/x[1],0)/d.length*100;
-    const bias=d.reduce((a,x)=>a+x[0]-x[1],0)/d.length;
-    out.push('<div style="color:'+s.color+'"><b>'+s.name+' vs krv</b>: MARD '+mard.toFixed(1)+' % | Ø '+sg(bias)+' | n='+d.length+'</div>');
+   if(!d.length)return;
+   const n=d.length;
+   const bias=d.reduce((a,x)=>a+x[0]-x[1],0)/n;
+   let txt;
+   if(n<20){
+    txt='málo meraní (n='+n+') – MARD zatiaľ nehodnotím | Ø odchýlka '+sg(bias);
+   }else{
+    const mard=d.reduce((a,x)=>a+Math.abs(x[0]-x[1])/x[1],0)/n*100;
+    txt='MARD '+mard.toFixed(1)+' %'+(n<50?' (orientačné)':'')+' | Ø '+sg(bias)+' | n='+n;
    }
+   out.push('<div style="color:'+s.color+'"><b>'+s.name+' vs krv</b>: '+txt+'</div>');
   });
  }
  $('pair').innerHTML=out.join('')||'<span style="color:#9aa">Štatistika sa zobrazí, keď budú dáta aspoň z dvoch zdrojov.</span>';
