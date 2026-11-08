@@ -38,12 +38,19 @@
  #st{font-size:12px;color:#9aa;margin-top:6px}
  #pair{font-size:13px;margin-top:8px;background:#1a222c;border-radius:10px;padding:10px}
  #pair div{margin:2px 0}
+ #ch{touch-action:pan-y}
+ .nv{width:auto;margin-top:0;padding:8px 14px;background:#345}
+ #nsl{padding:0;border:0;height:28px;flex:1}
+ #nav{display:flex;gap:6px;align-items:center;margin-top:8px}
+ #nlab{font-size:12px;color:#9aa;margin-top:4px;text-align:center}
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 7.11. 10:20</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 8.11. 14:25</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
+<div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
+<div id="nlab"></div>
 <div id="st"></div>
 <div id="pair"></div>
 <details id="bl" open><summary>Merania z krvi (z Nightscoutu G6) vs senzory</summary>
@@ -88,7 +95,7 @@ const toU=v=>$('unit').value==='mmol'?v/MG:v;
 const fmt=v=>$('unit').value==='mmol'?v.toFixed(1):Math.round(v);
 const sg=v=>(v>=0?'+':'')+fmt(v);
 const hm=t=>new Date(t).toLocaleTimeString('sk',{hour:'2-digit',minute:'2-digit'});
-const hmd=t=>(+$('hrs').value>24?new Date(t).toLocaleDateString('sk',{day:'numeric',month:'numeric'})+' ':'')+hm(t);
+const hmd=t=>(+$('hrs').value>24||new Date(t).toDateString()!==new Date().toDateString()?new Date(t).toLocaleDateString('sk',{day:'numeric',month:'numeric'})+' ':'')+hm(t);
 let chart,timer;
 function active(){
  const one=$('mode').value==='one';
@@ -101,7 +108,7 @@ function mk(){
  const ds=act.map(s=>({label:s.name,borderColor:s.color,backgroundColor:s.color,data:[],showLine:true,pointRadius:2,tension:.25,borderWidth:2}));
  ds.push({label:'Hodnota BG z prsta',borderColor:'#fff',backgroundColor:'#ff2d2d',borderWidth:2,data:[],showLine:false,pointStyle:'rectRot',pointRadius:8,pointHoverRadius:10});
  chart=new Chart($('ch'),{type:'scatter',data:{datasets:ds},
-  options:{animation:false,maintainAspectRatio:false,parsing:false,
+  options:{animation:false,normalized:true,maintainAspectRatio:false,parsing:false,
    scales:{x:{type:'linear',ticks:{color:'#9aa',callback:hmd},grid:{color:'#223'}},
            y:{min:mm?2:40,max:mm?16:300,ticks:{color:'#9aa'},grid:{color:'#223'}}},
    plugins:{legend:{labels:{color:'#e6e6e6'}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y.toFixed(mm?1:0)+' @ '+new Date(c.parsed.x).toLocaleTimeString('sk')}}}}});
@@ -116,7 +123,7 @@ function ns(u,k){ // zvládne URL s koncovým lomítkom, /api/..., ?token=..., b
 }
 async function get(u,k,from){
  const b=(u||'').trim().replace(/\/+$/,'');if(!b)return[];
- const url=b+'/sgv?count='+Math.max(1000,Math.round(((Date.now()-from)/3600e3)*30))+'&from='+from;
+ const url=b+'/sgv?count='+Math.min(30000,Math.max(1000,Math.round(((Date.now()-from)/3600e3)*130)))+'&from='+from;
  let r;try{r=await fetch(url)}catch(e){throw new Error('spojenie zlyhalo ('+e.message+')')}
  if(!r.ok)throw new Error('HTTP '+r.status);
  return r.json();
@@ -139,7 +146,13 @@ async function getBG(from){
  out.sort((p,q)=>p.t-q.t);
  return out.filter((p,i)=>!i||Math.abs(p.t-out[i-1].t)>2*60e3); // duplicity (mbg + treatment)
 }
-function near(arr,t,w){let best=null,bd=w;for(const p of arr){const d=Math.abs(p.x-t);if(d<bd){bd=d;best=p}}return best}
+function near(arr,t,w){ // arr zoradené podľa x
+ let lo=0,hi=arr.length;
+ while(lo<hi){const m=(lo+hi)>>1;if(arr[m].x<t)lo=m+1;else hi=m}
+ let best=null,bd=w;
+ for(const i of [lo-1,lo]){const p=arr[i];if(p){const d=Math.abs(p.x-t);if(d<bd){bd=d;best=p}}}
+ return best;
+}
 function cmpBlood(blood,act,data){
  const rows=blood.map(p=>{
   const u=toU(p.mg);
@@ -150,71 +163,89 @@ function cmpBlood(blood,act,data){
  $('bList').innerHTML=rows.reverse().join('')||'Zatiaľ žiadne merania z krvi.';
  $('bCmp').textContent='V zátvorke je odchýlka senzora od krvi; berie sa najbližšia hodnota senzora do 10 minút. Glukomery majú aj samy odchýlku.';
 }
-function pairStats(act,data,blood){
+function pairStats(act,data,blood,full){
  const out=[];
- for(let i=0;i<act.length;i++)for(let j=i+1;j<act.length;j++){
-  const A=data[act[i].id],B=data[act[j].id],d=[];
-  for(const p of A){const r=near(B,p.x,4*60e3);if(r)d.push([p.y,r.y])}
-  if(!d.length)continue;
-  const bias=d.reduce((s,x)=>s+x[0]-x[1],0)/d.length;
-  const mard=d.reduce((s,x)=>s+Math.abs(x[0]-x[1])/x[1],0)/d.length*100;
-  const l=d[d.length-1];
-  out.push('<div><b>'+act[i].name+' − '+act[j].name+'</b>: teraz '+sg(l[0]-l[1])+' | Ø '+sg(bias)+' | rozdiel '+mard.toFixed(1)+' % | n='+d.length+'</div>');
- }
  if(blood.length){
   act.forEach(s=>{
-   const d=[];for(const p of blood){const g=near(data[s.id],p.t,10*60e3);if(g)d.push([g.y,toU(p.mg)])}
+   const d=[];for(const p of blood){const g=near((full||data)[s.id],p.t,10*60e3);if(g)d.push([g.y,toU(p.mg)])}
    if(!d.length)return;
    const n=d.length;
    const bias=d.reduce((a,x)=>a+x[0]-x[1],0)/n;
-   let txt;
-   if(n<20){
-    txt='málo meraní (n='+n+') – MARD zatiaľ nehodnotím | Ø odchýlka '+sg(bias);
-   }else{
-    const mard=d.reduce((a,x)=>a+Math.abs(x[0]-x[1])/x[1],0)/n*100;
-    txt='MARD '+mard.toFixed(1)+' %'+(n<50?' (orientačné)':'')+' | Ø '+sg(bias)+' | n='+n;
-   }
+   const mard=d.reduce((a,x)=>a+Math.abs(x[0]-x[1])/x[1],0)/n*100;
+   const txt='MARD '+mard.toFixed(1)+' % | Ø '+sg(bias)+' | n='+n;
    out.push('<div style="color:'+s.color+'"><b>'+s.name+' vs krv</b>: '+txt+'</div>');
   });
  }
- $('pair').innerHTML=out.join('')||'<span style="color:#9aa">Štatistika sa zobrazí, keď budú dáta aspoň z dvoch zdrojov.</span>';
+ $('pair').innerHTML=out.join('')||'<span style="color:#9aa">Štatistika sa zobrazí, keď budú merania z krvi.</span>';
 }
+let cache={},last={},DATA={},bloodAll=[],view={live:true,end:0},raf=0;
+const W=()=>(+$('hrs').value||6)*3600e3;
+function viewRange(){
+ const now=Date.now(),w=W(),lo=Math.min(MIN_FROM+w,now);
+ let end=view.live?now:Math.min(Math.max(view.end,lo),now);
+ if(!view.live&&end>=now-60e3){view.live=true;end=now}
+ return{now,w,lo,end,start:Math.max(end-w,MIN_FROM)};
+}
+const fromFor=id=>last[id]?Math.max(last[id]-60*60e3,MIN_FROM):MIN_FROM;
+function merge(id,arr){const m=cache[id]||(cache[id]=new Map());(arr||[]).forEach(e=>{if(e&&e.sgv>0&&e.date)m.set(e.date,e)})}
 async function tick(){
  try{
-  const from=Math.max(Date.now()-$('hrs').value*3600e3,MIN_FROM); // nič staršie ako 6.11.2026 22:00 (SEČ)
-  const act=active();
-  const raw={},errs=[];
+  const act=active(),raw={},errs=[],t0=Date.now();
   if($('mode').value==='two'){
-   const res=await Promise.allSettled(act.map(s=>get($('u'+s.id).value,$('k'+s.id).value,from)));
-   act.forEach((s,i)=>{if(res[i].status==='fulfilled')raw[s.id]=res[i].value;else{raw[s.id]=[];errs.push(s.name+': '+res[i].reason.message)}});
+   const res=await Promise.allSettled(act.map(s=>get($('u'+s.id).value,$('k'+s.id).value,fromFor(s.id))));
+   act.forEach((s,i)=>{if(res[i].status==='fulfilled'){raw[s.id]=res[i].value;last[s.id]=t0}else{raw[s.id]=[];errs.push(s.name+': '+res[i].reason.message)}});
   }else{
-   const all=await get($('uA').value,$('kA').value,from);
-   act.forEach(s=>{const key=($('d'+s.id).value||s.def).toLowerCase();raw[s.id]=all.filter(e=>(e.device||'').toLowerCase().includes(key))});
+   const all=await get($('uA').value,$('kA').value,Math.min(...act.map(s=>fromFor(s.id))));
+   act.forEach(s=>{const key=($('d'+s.id).value||s.def).toLowerCase();raw[s.id]=all.filter(e=>(e.device||'').toLowerCase().includes(key));last[s.id]=t0});
   }
-  const data={};
+  act.forEach(s=>merge(s.id,raw[s.id]));
   act.forEach(s=>{
-   const arr=raw[s.id].filter(e=>e.sgv>0).map(e=>({x:e.date,y:toU(e.sgv)})).sort((a,b)=>a.x-b.x);
-   data[s.id]=arr.filter((p,i)=>!i||p.x-arr[i-1].x>60e3); // duplicity (dva uploadery)
+   const arr=[...(cache[s.id]||new Map()).values()].sort((a,b)=>a.date-b.date).map(e=>({x:e.date,y:toU(e.sgv)}));
+   DATA[s.id]=arr.filter((p,i)=>!i||p.x-arr[i-1].x>60e3); // duplicity (dva uploadery)
   });
   if(act.length>1&&$('mode').value==='two'){const a=$('uA').value.trim(),b=$('uB').value.trim();if(a&&b&&a===b)errs.push('GS3 aj G6 majú nastavený rovnaký zdroj');}
-  let blood=[];try{blood=await getBG(from)}catch(e){}
-  const k=blood.map(p=>({x:p.t,y:toU(p.mg)}));
-  act.forEach((s,i)=>chart.data.datasets[i].data=data[s.id]);
-  chart.data.datasets[act.length].data=k;
-  chart.options.scales.x.min=from;chart.options.scales.x.max=Date.now()+5*60e3;chart.update();
-  act.forEach(s=>{const l=data[s.id][data[s.id].length-1];$('v'+s.id).textContent=l?fmt(l.y):'–';$('t'+s.id).textContent=l?hm(l.x):''});
-  const lk=k[k.length-1];if($('bB'))$('bB').textContent=lk?'◆ krv '+fmt(lk.y)+' ('+hm(lk.x)+')':'◆ krv: žiadne merania';
-  cmpBlood(blood,act,data);
-  pairStats(act,data,blood);
+  try{bloodAll=await getBG(MIN_FROM)}catch(e){}
+  act.forEach((s,i)=>chart.data.datasets[i].data=DATA[s.id]||[]);
+  chart.data.datasets[act.length].data=bloodAll.map(p=>({x:p.t,y:toU(p.mg)}));
+  render();
   $('st').textContent=(errs.length?'Chyba – '+errs.join(' | ')+'. ':'')+'Aktualizované '+new Date().toLocaleTimeString('sk')+' (každých 60 s)';
  }catch(e){$('st').textContent='Chyba: '+e.message+' (skontroluj URL, token, CORS)'}
 }
+function render(fromSlider){
+ if(!chart)return;
+ const act=active(),r=viewRange();
+ chart.options.scales.x.min=r.start;chart.options.scales.x.max=r.end+(view.live?5*60e3:0);chart.update();
+ const win={};act.forEach(s=>win[s.id]=(DATA[s.id]||[]).filter(p=>p.x>=r.start&&p.x<=r.end));
+ const blood=bloodAll.filter(p=>p.t>=r.start&&p.t<=r.end);
+ act.forEach(s=>{const d=DATA[s.id]||[],l=d[d.length-1];$('v'+s.id).textContent=l?fmt(l.y):'–';$('t'+s.id).textContent=l?hm(l.x):''});
+ const lb=bloodAll[bloodAll.length-1];if($('bB'))$('bB').textContent=lb?'◆ krv '+fmt(toU(lb.mg))+' ('+hm(lb.t)+')':'◆ krv: žiadne merania';
+ cmpBlood(blood,act,DATA);
+ pairStats(act,win,blood,DATA);
+ const sl=$('nsl');sl.min=r.lo;sl.max=r.now;sl.step=60000;sl.disabled=r.lo>=r.now;if(!fromSlider)sl.value=r.end;
+ $('nn').style.opacity=view.live?.5:1;
+ const f=t=>new Date(t).toLocaleString('sk',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
+ $('nlab').textContent=f(r.start)+' – '+f(r.end)+(view.live?' (naživo)':'');
+}
+const sched=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;render()})};
+function save(){try{F.forEach(f=>S[f]=$(f).value);localStorage.setItem('cgm',JSON.stringify(S))}catch(e){}}
 function start(){
- try{F.forEach(f=>S[f]=$(f).value);localStorage.setItem('cgm',JSON.stringify(S))}catch(e){}
+ save();
  $('st').textContent='Načítavam…';
+ cache={};last={};DATA={};bloodAll=[];
  try{mk();clearInterval(timer);tick();timer=setInterval(tick,60000)}catch(e){$('st').textContent='Chyba: '+e.message}
 }
-$('go').onclick=start;$('unit').onchange=start;$('hrs').onchange=start;
+// posúvanie v dátach
+$('nsl').oninput=()=>{view.end=+$('nsl').value;view.live=false;render(true)};
+$('nb').onclick=()=>{const r=viewRange();view.end=r.end-r.w/2;view.live=false;render()};
+$('nf').onclick=()=>{const r=viewRange();view.end=r.end+r.w/2;view.live=false;render()};
+$('nn').onclick=()=>{view.live=true;render()};
+(function(){
+ const cv=$('ch');let d=null;
+ cv.addEventListener('pointerdown',e=>{const r=viewRange(),a=chart&&chart.chartArea;d={x:e.clientX,end:r.end,w:r.w,px:a?Math.max(200,a.right-a.left):cv.clientWidth};try{cv.setPointerCapture(e.pointerId)}catch(x){}});
+ cv.addEventListener('pointermove',e=>{if(!d)return;view.end=d.end-(e.clientX-d.x)/d.px*d.w;view.live=false;sched()});
+ ['pointerup','pointercancel'].forEach(n=>cv.addEventListener(n,()=>{d=null}));
+})();
+$('go').onclick=start;$('unit').onchange=start;$('hrs').onchange=()=>{save();render()};
 start();
 </script>
 </body></html>
