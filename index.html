@@ -46,7 +46,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 8.11. 22:10</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 8.11. 22:30</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -90,7 +90,7 @@ const PROXY='https://cgm-proxy.krajcovicroman.workers.dev';
 $('uA').value=PROXY+'/a';$('uB').value=PROXY+'/b'; // dáta idú cez worker, Nightscout nie je verejný
 if(q.get('edit'))$('adm').style.display='block';
 const MG=18.0182;
-const NOTES=[{t:Date.UTC(2026,10,8,20,55),text:'od 21:55 filtrovanie: GS3 cez xDrip'}]; // 8.11.2026 21:55 SEČ = 20:55 UTC
+const NOTES=[]; // poznámky v grafe: {t:Date.UTC(...),text:'...'}
 const MIN_FROM=Date.UTC(2026,10,6,21,0,0); // 6.11.2026 22:00 SEČ = 21:00 UTC
 const toU=v=>$('unit').value==='mmol'?v/MG:v;
 const fmt=v=>$('unit').value==='mmol'?v.toFixed(1):Math.round(v);
