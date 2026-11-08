@@ -46,7 +46,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 8.11. 14:35</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 8.11. 22:10</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -90,6 +90,7 @@ const PROXY='https://cgm-proxy.krajcovicroman.workers.dev';
 $('uA').value=PROXY+'/a';$('uB').value=PROXY+'/b'; // dáta idú cez worker, Nightscout nie je verejný
 if(q.get('edit'))$('adm').style.display='block';
 const MG=18.0182;
+const NOTES=[{t:Date.UTC(2026,10,8,20,55),text:'od 21:55 filtrovanie: GS3 cez xDrip'}]; // 8.11.2026 21:55 SEČ = 20:55 UTC
 const MIN_FROM=Date.UTC(2026,10,6,21,0,0); // 6.11.2026 22:00 SEČ = 21:00 UTC
 const toU=v=>$('unit').value==='mmol'?v/MG:v;
 const fmt=v=>$('unit').value==='mmol'?v.toFixed(1):Math.round(v);
@@ -108,6 +109,20 @@ function mk(){
  const ds=act.map(s=>({label:s.name,borderColor:s.color,backgroundColor:s.color,data:[],showLine:true,pointRadius:2,tension:.25,borderWidth:2}));
  ds.push({label:'Hodnota BG z prsta',borderColor:'#fff',backgroundColor:'#ff2d2d',borderWidth:2,data:[],showLine:false,pointStyle:'rectRot',pointRadius:8,pointHoverRadius:10});
  chart=new Chart($('ch'),{type:'scatter',data:{datasets:ds},
+  plugins:[{id:'notes',afterDatasetsDraw(c){
+   const x=c.scales.x,a=c.chartArea,g=c.ctx;
+   NOTES.forEach(n=>{
+    if(n.t<x.min||n.t>x.max)return;
+    const px=x.getPixelForValue(n.t);
+    g.save();g.strokeStyle='#e0e0e0';g.lineWidth=1.5;g.setLineDash([6,4]);
+    g.beginPath();g.moveTo(px,a.top);g.lineTo(px,a.bottom);g.stroke();g.setLineDash([]);
+    g.font='12px system-ui,sans-serif';const w=g.measureText(n.text).width+10;
+    let bx=px+4;if(bx+w>a.right)bx=px-4-w;
+    g.fillStyle='rgba(15,20,25,.85)';g.fillRect(bx,a.top+4,w,20);
+    g.fillStyle='#fff';g.textBaseline='middle';g.fillText(n.text,bx+5,a.top+14);
+    g.restore();
+   });
+  }}],
   options:{animation:false,normalized:true,maintainAspectRatio:false,parsing:false,
    scales:{x:{type:'linear',ticks:{color:'#9aa',callback:hmd},grid:{color:'#223'}},
            y:{min:mm?2:40,max:mm?16:300,ticks:{color:'#9aa'},grid:{color:'#223'}}},
