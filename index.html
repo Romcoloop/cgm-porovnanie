@@ -46,7 +46,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 9.11. 18:05</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 9.11. 18:15</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -218,14 +218,23 @@ function cmpBlood(blood,act,data){
 function pairStats(act,data,blood,full){
  const out=[];
  if(blood.length){
-  act.forEach(s=>{
-   const d=[];for(const p of blood){const g=near((full||data)[s.id],p.t,10*60e3);if(g)d.push([g.y,toU(p.mg)])}
-   if(!d.length)return;
+  const stat=arr=>{
+   const d=[];for(const p of blood){const g=near(arr,p.t,10*60e3);if(g)d.push([g.y,toU(p.mg)])}
+   if(!d.length)return null;
    const n=d.length;
    const bias=d.reduce((a,x)=>a+x[0]-x[1],0)/n;
    const mard=d.reduce((a,x)=>a+Math.abs(x[0]-x[1])/x[1],0)/n*100;
-   const txt='MARD '+mard.toFixed(1)+' % | Ø '+sg(bias)+' | n='+n;
+   return 'MARD '+mard.toFixed(1)+' % | Ø '+sg(bias)+' | n='+n;
+  };
+  act.forEach(s=>{
+   const src=(full||data)[s.id]||[];
+   const txt=stat(src);
+   if(!txt)return;
    out.push('<div style="color:'+s.color+'"><b>'+s.name+' vs krv</b>: '+txt+'</div>');
+   if(s.id==='A'&&$('flt').value!=='raw'){
+    const ft=stat(filtered(s.id,src));
+    if(ft)out.push('<div style="color:'+s.color+';opacity:.75;font-size:12px">↳ po filtri ('+($('flt').value==='avg'?'priemer':'exponenciálny')+'): '+ft+'</div>');
+   }
   });
  }
  $('pair').innerHTML=out.join('')||'<span style="color:#9aa">Štatistika sa zobrazí, keď budú merania z krvi.</span>';
