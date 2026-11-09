@@ -46,7 +46,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 9.11. 18:15</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 9.11. 18:20</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -231,10 +231,6 @@ function pairStats(act,data,blood,full){
    const txt=stat(src);
    if(!txt)return;
    out.push('<div style="color:'+s.color+'"><b>'+s.name+' vs krv</b>: '+txt+'</div>');
-   if(s.id==='A'&&$('flt').value!=='raw'){
-    const ft=stat(filtered(s.id,src));
-    if(ft)out.push('<div style="color:'+s.color+';opacity:.75;font-size:12px">↳ po filtri ('+($('flt').value==='avg'?'priemer':'exponenciálny')+'): '+ft+'</div>');
-   }
   });
  }
  $('pair').innerHTML=out.join('')||'<span style="color:#9aa">Štatistika sa zobrazí, keď budú merania z krvi.</span>';
