@@ -46,7 +46,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 8.11. 22:30</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 9.11. 18:05</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -62,6 +62,7 @@
  <div class="r">
   <div><label>Jednotky</label><select id="unit"><option value="mmol">mmol/L</option><option value="mg">mg/dL</option></select></div>
   <div><label>Okno (hod.)</label><select id="hrs"><option>3</option><option selected>6</option><option>12</option><option>24</option><option>72</option><option>168</option></select></div>
+  <div><label>Filter GS3 (graf)</label><select id="flt"><option value="raw">Surové</option><option value="avg">Priemer (AAPS Average)</option><option value="exp" selected>Exponenciálny (AAPS)</option></select></div>
  </div>
  <div id="adm" style="display:none">
   <div class="r"><div><label>Zobrazenie</label><select id="mode"><option value="two">Samostatné Nightscouty</option><option value="one">Jeden Nightscout (rozlíšenie podľa device)</option></select></div></div>
@@ -82,7 +83,7 @@ window.onerror=(m,u,l)=>{const e=document.getElementById('st');if(e)e.textConten
 const $=id=>document.getElementById(id);
 const SENS=[{id:'A',name:'Sibionics GS3',color:'#4fc3f7',def:'juggluco'},
             {id:'B',name:'Dexcom G6',color:'#ffb74d',def:'xdrip'}];
-const F=['mode','unit','hrs'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]));
+const F=['mode','unit','hrs','flt'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]));
 const q=new URLSearchParams(location.search);
 let S={};try{S=JSON.parse(localStorage.getItem('cgm')||'{}')}catch(e){}
 F.forEach(f=>{if(q.get(f))S[f]=q.get(f);if(S[f]!=null)$(f).value=S[f]});
@@ -108,6 +109,7 @@ function mk(){
  if(chart)chart.destroy();
  const ds=act.map(s=>({label:s.name,borderColor:s.color,backgroundColor:s.color,data:[],showLine:true,pointRadius:2,tension:.25,borderWidth:2}));
  ds.push({label:'Hodnota BG z prsta',borderColor:'#fff',backgroundColor:'#ff2d2d',borderWidth:2,data:[],showLine:false,pointStyle:'rectRot',pointRadius:8,pointHoverRadius:10});
+ ds.push({label:'GS3 surové',borderColor:'rgba(79,195,247,.3)',backgroundColor:'rgba(79,195,247,.3)',data:[],showLine:true,pointRadius:0,tension:0,borderWidth:1,order:5}); // slabá surová čiara pod vyhladenou
  chart=new Chart($('ch'),{type:'scatter',data:{datasets:ds},
   plugins:[{id:'notes',afterDatasetsDraw(c){
    const x=c.scales.x,a=c.chartArea,g=c.ctx;
@@ -126,7 +128,7 @@ function mk(){
   options:{animation:false,normalized:true,maintainAspectRatio:false,parsing:false,
    scales:{x:{type:'linear',ticks:{color:'#9aa',callback:hmd},grid:{color:'#223'}},
            y:{min:mm?2:40,max:mm?16:300,ticks:{color:'#9aa'},grid:{color:'#223'}}},
-   plugins:{legend:{labels:{color:'#e6e6e6'}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y.toFixed(mm?1:0)+' @ '+new Date(c.parsed.x).toLocaleTimeString('sk')}}}}});
+   plugins:{legend:{labels:{color:'#e6e6e6',filter:i=>i.text!=='GS3 surové'}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y.toFixed(mm?1:0)+' @ '+new Date(c.parsed.x).toLocaleTimeString('sk')}}}}});
  $('cards').innerHTML=act.map(s=>'<div class="c"><small>'+s.name+'</small><b id="v'+s.id+'" style="color:'+s.color+'">–</b><small id="t'+s.id+'"></small>'+(s.id==='B'?'<small id="bB" style="display:block;margin-top:4px;color:#ff2d2d"></small>':'')+'</div>').join('');
 }
 function ns(u,k){ // zvládne URL s koncovým lomítkom, /api/..., ?token=..., bez https://
@@ -160,6 +162,41 @@ async function getBG(from){
  }catch(e){}
  out.sort((p,q)=>p.t-q.t);
  return out.filter((p,i)=>!i||Math.abs(p.t-out[i-1].t)>2*60e3); // duplicity (mbg + treatment)
+}
+// ---- filtre podľa princípu AAPS (Smoothing) ----
+// Exponential: Holtov dvojitý exponenciálny filter (úroveň + trend), nemá takmer žiadne oneskorenie.
+// alpha/beta sú vztiahnuté na 5-min krok, takže správanie nezávisí od hustoty dát.
+function smoothHolt(pts,alpha=.4,beta=.3,maxGapMin=15){
+ const floor=$('unit').value==='mmol'?2.2:40; // pri nízkych hodnotách vždy surová
+ let level=null,trend=0,lastT=null;
+ return pts.map(p=>{
+  const gap=lastT==null?0:(p.x-lastT)/60e3;
+  if(level==null||gap>maxGapMin){level=p.y;trend=0}
+  else{
+   const st=Math.max(gap,.5),a=1-Math.pow(1-alpha,st/5),b=1-Math.pow(1-beta,st/5);
+   const nl=a*p.y+(1-a)*(level+trend*st);
+   trend=b*((nl-level)/st)+(1-b)*trend;level=nl;
+  }
+  lastT=p.x;
+  return{x:p.x,y:p.y<floor?p.y:level};
+ });
+}
+// Average: priemer posledných n hodnôt (len minulých, v rámci 15 min)
+function smoothAvg(pts,n=3){
+ return pts.map((p,i)=>{
+  const w=[];for(let j=i;j>=0&&w.length<n&&p.x-pts[j].x<=15*60e3;j--)w.push(pts[j].y);
+  return{x:p.x,y:w.reduce((a,b)=>a+b,0)/w.length};
+ });
+}
+function filtered(id,d){
+ const m=$('flt').value;
+ if(id!=='A'||m==='raw')return d;
+ return m==='avg'?smoothAvg(d):smoothHolt(d);
+}
+function setChartData(act){
+ act.forEach((s,i)=>chart.data.datasets[i].data=filtered(s.id,DATA[s.id]||[]));
+ chart.data.datasets[act.length].data=bloodAll.map(p=>({x:p.t,y:toU(p.mg)}));
+ chart.data.datasets[act.length+1].data=($('flt').value!=='raw'&&DATA.A)?DATA.A:[];
 }
 function near(arr,t,w){ // arr zoradené podľa x
  let lo=0,hi=arr.length;
@@ -220,8 +257,7 @@ async function tick(){
   });
   if(act.length>1&&$('mode').value==='two'){const a=$('uA').value.trim(),b=$('uB').value.trim();if(a&&b&&a===b)errs.push('GS3 aj G6 majú nastavený rovnaký zdroj');}
   try{bloodAll=await getBG(MIN_FROM)}catch(e){}
-  act.forEach((s,i)=>chart.data.datasets[i].data=DATA[s.id]||[]);
-  chart.data.datasets[act.length].data=bloodAll.map(p=>({x:p.t,y:toU(p.mg)}));
+  setChartData(act);
   render();
   $('st').textContent=(errs.length?'Chyba – '+errs.join(' | ')+'. ':'')+'Aktualizované '+new Date().toLocaleTimeString('sk')+' (každých 60 s)';
  }catch(e){$('st').textContent='Chyba: '+e.message+' (skontroluj URL, token, CORS)'}
@@ -260,7 +296,7 @@ $('nn').onclick=()=>{view.live=true;render()};
  cv.addEventListener('pointermove',e=>{if(!d)return;view.end=d.end-(e.clientX-d.x)/d.px*d.w;view.live=false;sched()});
  ['pointerup','pointercancel'].forEach(n=>cv.addEventListener(n,()=>{d=null}));
 })();
-$('go').onclick=start;$('unit').onchange=start;$('hrs').onchange=()=>{save();render()};
+$('go').onclick=start;$('unit').onchange=start;$('flt').onchange=()=>{save();if(chart){setChartData(active());render()}};$('hrs').onchange=()=>{save();render()};
 start();
 </script>
 </body></html>
