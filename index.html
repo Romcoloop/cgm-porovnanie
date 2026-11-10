@@ -46,7 +46,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 10.11. 02:55</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 9.11. 21:45</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -63,7 +63,6 @@
   <div><label>Jednotky</label><select id="unit"><option value="mmol">mmol/L</option><option value="mg">mg/dL</option></select></div>
   <div><label>Okno (hod.)</label><select id="hrs"><option>3</option><option selected>6</option><option>12</option><option>24</option><option>72</option><option>168</option></select></div>
   <div><label>Filter GS3 (graf)</label><select id="flt"><option value="raw">Surové</option><option value="avg" selected>Priemer (AAPS Average)</option><option value="exp">Exponenciálny (AAPS)</option></select></div>
-  <div><label>Kalibrácia na 7,8 (9.11. 21:40)</label><select id="cal"><option value="1" selected>Zapnutá</option><option value="0">Vypnutá (surové)</option></select></div>
  </div>
  <div id="adm" style="display:none">
   <div class="r"><div><label>Zobrazenie</label><select id="mode"><option value="two">Samostatné Nightscouty</option><option value="one">Jeden Nightscout (rozlíšenie podľa device)</option></select></div></div>
@@ -84,7 +83,7 @@ window.onerror=(m,u,l)=>{const e=document.getElementById('st');if(e)e.textConten
 const $=id=>document.getElementById(id);
 const SENS=[{id:'A',name:'Sibionics GS3',color:'#4fc3f7',def:'juggluco'},
             {id:'B',name:'Dexcom G6',color:'#ffb74d',def:'xdrip'}];
-const F=['mode','unit','hrs','flt','cal'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]));
+const F=['mode','unit','hrs','flt'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]));
 const q=new URLSearchParams(location.search);
 let S={};try{S=JSON.parse(localStorage.getItem('cgm')||'{}')}catch(e){}
 F.forEach(f=>{if(q.get(f))S[f]=q.get(f);if(S[f]!=null)$(f).value=S[f]});
@@ -98,15 +97,6 @@ const NOTES=[ // poznámky v grafe: {t:Date.UTC(...),text:'...'}
 // merania z krvi použité na kalibráciu sa do MARD nepočítajú (v grafe ostávajú viditeľné)
 const CAL_EXCL=[{t:Date.UTC(2026,10,9,20,40,0),mmol:7.8}];
 const isCal=p=>CAL_EXCL.some(c=>Math.abs(p.t-c.t)<=10*60e3&&Math.abs(p.mg/MG-c.mmol)<=0.15);
-// kalibrácia na stránke: konštantný posun každej krivky tak, aby o CAL.t sedela na CAL.mmol (surové dáta v Nightscoute ostávajú)
-const CAL={t:Date.UTC(2026,10,9,20,40,0),mmol:7.8};
-let CALOFF={},DATARAW={}; // posun v mg/dL a nekalibrované krivky
-function calOff(ent){ // ent: záznamy {date,sgv} zoradené podľa času
- let m=ent.filter(e=>Math.abs(e.date-CAL.t)<=5*60e3);
- if(!m.length){let b=null,bd=10*60e3;ent.forEach(e=>{const d=Math.abs(e.date-CAL.t);if(d<bd){bd=d;b=e}});m=b?[b]:[]}
- if(!m.length)return null;
- return CAL.mmol*MG-m.reduce((a,e)=>a+e.sgv,0)/m.length;
-}
 const MIN_FROM=Date.UTC(2026,10,6,21,0,0); // 6.11.2026 22:00 SEČ = 21:00 UTC
 const toU=v=>$('unit').value==='mmol'?v/MG:v;
 const fmt=v=>$('unit').value==='mmol'?v.toFixed(1):Math.round(v);
@@ -233,23 +223,19 @@ function cmpBlood(blood,act,data){
 function pairStats(act,data,blood,full){
  const out=[];
  if(blood.length){
-  const stat=(arr,bl)=>{
-   const d=[];for(const p of (bl||blood)){const g=near(arr,p.t,10*60e3);if(g)d.push([g.y,toU(p.mg)])}
+  const stat=arr=>{
+   const d=[];for(const p of blood){const g=near(arr,p.t,10*60e3);if(g)d.push([g.y,toU(p.mg)])}
    if(!d.length)return null;
    const n=d.length;
    const bias=d.reduce((a,x)=>a+x[0]-x[1],0)/n;
    const mard=d.reduce((a,x)=>a+Math.abs(x[0]-x[1])/x[1],0)/n*100;
-   return bl?'MARD '+mard.toFixed(1)+' % (n='+n+')':'MARD '+mard.toFixed(1)+' % | Ø '+sg(bias)+' | n='+n;
+   return 'MARD '+mard.toFixed(1)+' % | Ø '+sg(bias)+' | n='+n;
   };
   act.forEach(s=>{
    const src=(full||data)[s.id]||[];
    const txt=stat(src);
    if(!txt)return;
    out.push('<div style="color:'+s.color+'"><b>'+s.name+' vs krv</b>: '+txt+'</div>');
-   if($('cal').value==='1'&&CALOFF[s.id]!=null){
-    const pre=stat(DATARAW[s.id]||[],blood.filter(p=>p.t<CAL.t)),post=stat(src,blood.filter(p=>p.t>=CAL.t));
-    out.push('<div style="color:'+s.color+';font-size:12px;opacity:.85">&nbsp;&nbsp;pred kalibráciou (surové): '+(pre||'–')+' · po kalibrácii: '+(post||'–')+' · posun '+sg(toU(CALOFF[s.id]))+'</div>');
-   }
   });
  }
  $('pair').innerHTML=out.join('')||'<span style="color:#9aa">Štatistika sa zobrazí, keď budú merania z krvi.</span>';
@@ -276,11 +262,8 @@ async function tick(){
   }
   act.forEach(s=>merge(s.id,raw[s.id]));
   act.forEach(s=>{
-   const ent=[...(cache[s.id]||new Map()).values()].sort((a,b)=>a.date-b.date);
-   const dedup=a=>a.filter((p,i)=>!i||p.x-a[i-1].x>60e3); // duplicity (dva uploadery)
-   const off=calOff(ent);CALOFF[s.id]=off;
-   DATARAW[s.id]=dedup(ent.map(e=>({x:e.date,y:toU(e.sgv)})));
-   DATA[s.id]=($('cal').value==='1'&&off!=null)?dedup(ent.map(e=>({x:e.date,y:toU(Math.max(e.sgv+off,10))}))):DATARAW[s.id];
+   const arr=[...(cache[s.id]||new Map()).values()].sort((a,b)=>a.date-b.date).map(e=>({x:e.date,y:toU(e.sgv)}));
+   DATA[s.id]=arr.filter((p,i)=>!i||p.x-arr[i-1].x>60e3); // duplicity (dva uploadery)
   });
   if(act.length>1&&$('mode').value==='two'){const a=$('uA').value.trim(),b=$('uB').value.trim();if(a&&b&&a===b)errs.push('GS3 aj G6 majú nastavený rovnaký zdroj');}
   try{bloodAll=await getBG(MIN_FROM)}catch(e){}
@@ -309,7 +292,7 @@ function save(){try{F.forEach(f=>S[f]=$(f).value);localStorage.setItem('cgm',JSO
 function start(){
  save();
  $('st').textContent='Načítavam…';
- cache={};last={};DATA={};DATARAW={};CALOFF={};bloodAll=[];
+ cache={};last={};DATA={};bloodAll=[];
  try{mk();clearInterval(timer);tick();timer=setInterval(tick,60000)}catch(e){$('st').textContent='Chyba: '+e.message}
 }
 // posúvanie v dátach
@@ -323,7 +306,7 @@ $('nn').onclick=()=>{view.live=true;render()};
  cv.addEventListener('pointermove',e=>{if(!d)return;view.end=d.end-(e.clientX-d.x)/d.px*d.w;view.live=false;sched()});
  ['pointerup','pointercancel'].forEach(n=>cv.addEventListener(n,()=>{d=null}));
 })();
-$('go').onclick=start;$('unit').onchange=start;$('flt').onchange=()=>{save();if(chart){setChartData(active());render()}};$('hrs').onchange=()=>{save();render()};$('cal').onchange=()=>{save();tick()};
+$('go').onclick=start;$('unit').onchange=start;$('flt').onchange=()=>{save();if(chart){setChartData(active());render()}};$('hrs').onchange=()=>{save();render()};
 start();
 </script>
 </body></html>
