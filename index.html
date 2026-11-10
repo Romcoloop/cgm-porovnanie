@@ -46,7 +46,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 9.11. 21:45</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 9.11. 18:25</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -91,12 +91,7 @@ const PROXY='https://cgm-proxy.krajcovicroman.workers.dev';
 $('uA').value=PROXY+'/a';$('uB').value=PROXY+'/b'; // dáta idú cez worker, Nightscout nie je verejný
 if(q.get('edit'))$('adm').style.display='block';
 const MG=18.0182;
-const NOTES=[ // poznámky v grafe: {t:Date.UTC(...),text:'...'}
- {t:Date.UTC(2026,10,9,20,40,0),text:'Kalibrácia oboch CGM na 7,8 mmol/L'} // 9.11.2026 21:40 SEČ
-];
-// merania z krvi použité na kalibráciu sa do MARD nepočítajú (v grafe ostávajú viditeľné)
-const CAL_EXCL=[{t:Date.UTC(2026,10,9,20,40,0),mmol:7.8}];
-const isCal=p=>CAL_EXCL.some(c=>Math.abs(p.t-c.t)<=10*60e3&&Math.abs(p.mg/MG-c.mmol)<=0.15);
+const NOTES=[]; // poznámky v grafe: {t:Date.UTC(...),text:'...'}
 const MIN_FROM=Date.UTC(2026,10,6,21,0,0); // 6.11.2026 22:00 SEČ = 21:00 UTC
 const toU=v=>$('unit').value==='mmol'?v/MG:v;
 const fmt=v=>$('unit').value==='mmol'?v.toFixed(1):Math.round(v);
@@ -281,7 +276,7 @@ function render(fromSlider){
  act.forEach(s=>{const d=DATA[s.id]||[],l=d[d.length-1];$('v'+s.id).textContent=l?fmt(l.y):'–';$('t'+s.id).textContent=l?hm(l.x):''});
  const lb=bloodAll[bloodAll.length-1];if($('bB'))$('bB').textContent=lb?'◆ krv '+fmt(toU(lb.mg))+' ('+hm(lb.t)+')':'◆ krv: žiadne merania';
  cmpBlood(blood,act,DATA);
- pairStats(act,DATA,bloodAll.filter(p=>!isCal(p)),DATA); // MARD zo všetkých meraní, nezávisle od okna
+ pairStats(act,DATA,bloodAll,DATA); // MARD zo všetkých meraní, nezávisle od okna
  const sl=$('nsl');sl.min=r.lo;sl.max=r.now;sl.step=60000;sl.disabled=r.lo>=r.now;if(!fromSlider)sl.value=r.end;
  $('nn').style.opacity=view.live?.5:1;
  const f=t=>new Date(t).toLocaleString('sk',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
