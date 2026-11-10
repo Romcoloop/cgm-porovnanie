@@ -146,7 +146,7 @@ async function get(u,k,from,quiet){
  const b=(u||'').trim().replace(/\/+$/,'');if(!b)return[];
  const url=b+'/sgv?count='+Math.min(30000,Math.max(1000,Math.round(((Date.now()-from)/3600e3)*130)))+'&from='+from;
  let r;try{r=await fetch(url)}catch(e){throw new Error('spojenie zlyhalo ('+e.message+')')}
- if(quiet&&r.status===404)return[]; // ONE+ cesta ešte nie je nastavená vo workeri
+ if(quiet&&(r.status===404||r.status===500))return[]; // ONE+ cesta ešte nie je nastavená vo workeri
  if(!r.ok)throw new Error('HTTP '+r.status);
  return r.json();
 }
