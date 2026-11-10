@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Porovnanie CGM: GS3 vs Dexcom G6</title>
+<title>Porovnanie CGM: GS3 vs Dexcom G6 vs ONE+</title>
 <script>
 /*!
  * Chart.js v4.6.1
@@ -46,7 +46,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 <small style="font-weight:400;color:#789;font-size:11px">verzia 9.11. 18:25</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#789;font-size:11px">verzia 10.11. 18:50</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -70,9 +70,12 @@
  <label>GS3 – token (ak treba)</label><input id="kA">
  <label>G6 – URL Nightscoutu (v režime „jeden" nechaj prázdne)</label><input id="uB">
  <label>G6 – token (ak treba)</label><input id="kB">
+ <label>ONE+ – URL Nightscoutu (cez worker /c)</label><input id="uC">
+ <label>ONE+ – token (ak treba)</label><input id="kC">
  <div class="r">
   <div><label>Režim „jeden": device GS3</label><input id="dA" placeholder="juggluco"></div>
   <div><label>device G6</label><input id="dB" placeholder="xdrip"></div>
+  <div><label>device ONE+</label><input id="dC" placeholder="dexcom"></div>
  </div>
  <button id="go" type="button" onclick="start()">Uložiť a spustiť</button>
  </div>
@@ -82,13 +85,14 @@
 window.onerror=(m,u,l)=>{const e=document.getElementById('st');if(e)e.textContent='Chyba skriptu: '+m+' (riadok '+l+')'};
 const $=id=>document.getElementById(id);
 const SENS=[{id:'A',name:'Sibionics GS3',color:'#4fc3f7',def:'juggluco'},
-            {id:'B',name:'Dexcom G6',color:'#ffb74d',def:'xdrip'}];
+            {id:'B',name:'Dexcom G6',color:'#ffb74d',def:'xdrip'},
+            {id:'C',name:'Dexcom ONE+',color:'#ba68c8',def:'dexcom'}];
 const F=['mode','unit','hrs','flt'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]));
 const q=new URLSearchParams(location.search);
 let S={};try{S=JSON.parse(localStorage.getItem('cgm')||'{}')}catch(e){}
 F.forEach(f=>{if(q.get(f))S[f]=q.get(f);if(S[f]!=null)$(f).value=S[f]});
 const PROXY='https://cgm-proxy.krajcovicroman.workers.dev';
-$('uA').value=PROXY+'/a';$('uB').value=PROXY+'/b'; // dáta idú cez worker, Nightscout nie je verejný
+$('uA').value=PROXY+'/a';$('uB').value=PROXY+'/b';$('uC').value=PROXY+'/c'; // dáta idú cez worker, Nightscout nie je verejný
 if(q.get('edit'))$('adm').style.display='block';
 const MG=18.0182;
 const NOTES=[]; // poznámky v grafe: {t:Date.UTC(...),text:'...'}
@@ -138,10 +142,11 @@ function ns(u,k){ // zvládne URL s koncovým lomítkom, /api/..., ?token=..., b
  const t=k&&k.trim()?k.trim():(o.searchParams.get('token')||'');
  return{base:o.origin,tok:t?'&token='+encodeURIComponent(t):''};
 }
-async function get(u,k,from){
+async function get(u,k,from,quiet){
  const b=(u||'').trim().replace(/\/+$/,'');if(!b)return[];
  const url=b+'/sgv?count='+Math.min(30000,Math.max(1000,Math.round(((Date.now()-from)/3600e3)*130)))+'&from='+from;
  let r;try{r=await fetch(url)}catch(e){throw new Error('spojenie zlyhalo ('+e.message+')')}
+ if(quiet&&r.status===404)return[]; // ONE+ cesta ešte nie je nastavená vo workeri
  if(!r.ok)throw new Error('HTTP '+r.status);
  return r.json();
 }
@@ -249,7 +254,7 @@ async function tick(){
  try{
   const act=active(),raw={},errs=[],t0=Date.now();
   if($('mode').value==='two'){
-   const res=await Promise.allSettled(act.map(s=>get($('u'+s.id).value,$('k'+s.id).value,fromFor(s.id))));
+   const res=await Promise.allSettled(act.map(s=>get($('u'+s.id).value,$('k'+s.id).value,fromFor(s.id),s.id==='C')));
    act.forEach((s,i)=>{if(res[i].status==='fulfilled'){raw[s.id]=res[i].value;last[s.id]=t0}else{raw[s.id]=[];errs.push(s.name+': '+res[i].reason.message)}});
   }else{
    const all=await get($('uA').value,$('kA').value,Math.min(...act.map(s=>fromFor(s.id))));
