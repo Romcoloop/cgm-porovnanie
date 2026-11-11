@@ -46,7 +46,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#789;font-size:11px">verzia 10.11. 18:50</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#789;font-size:11px">verzia 11.11. 21:45</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -84,9 +84,10 @@
 <script>
 window.onerror=(m,u,l)=>{const e=document.getElementById('st');if(e)e.textContent='Chyba skriptu: '+m+' (riadok '+l+')'};
 const $=id=>document.getElementById(id);
-const SENS=[{id:'A',name:'Sibionics GS3',color:'#4fc3f7',def:'juggluco'},
-            {id:'B',name:'Dexcom G6',color:'#ffb74d',def:'xdrip'},
-            {id:'C',name:'Dexcom ONE+',color:'#ba68c8',def:'dexcom'}];
+const SENS=[{id:'A',name:'Sibionics GS3',color:'#4fc3f7',def:'juggluco',life:14,start:Date.UTC(2026,10,6,21,0)}, // štart senzora (UTC); 6.11.2026 22:00 SEČ
+            {id:'B',name:'Dexcom G6',color:'#ffb74d',def:'xdrip',life:10,start:Date.UTC(2026,10,6,21,0)},
+            {id:'C',name:'Dexcom ONE+',color:'#ba68c8',def:'dexcom',life:10,start:Date.UTC(2026,10,10,17,30)}]; // ONE+ štart 10.11.2026 ~18:30 SEČ (odhad)
+const age=s=>{const d=Math.max(0,(Date.now()-s.start)/864e5);return d.toFixed(1).replace('.',',')+' / '+s.life+' dní'};
 const F=['mode','unit','hrs','flt'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]));
 const q=new URLSearchParams(location.search);
 let S={};try{S=JSON.parse(localStorage.getItem('cgm')||'{}')}catch(e){}
@@ -133,7 +134,7 @@ function mk(){
    scales:{x:{type:'linear',ticks:{color:'#9aa',callback:hmd},grid:{color:'#223'}},
            y:{min:mm?2:40,max:mm?16:300,ticks:{color:'#9aa'},grid:{color:'#223'}}},
    plugins:{legend:{labels:{color:'#e6e6e6',filter:i=>i.text!=='GS3 surové'}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y.toFixed(mm?1:0)+' @ '+new Date(c.parsed.x).toLocaleTimeString('sk')}}}}});
- $('cards').innerHTML=act.map(s=>'<div class="c"><small>'+s.name+'</small><b id="v'+s.id+'" style="color:'+s.color+'">–</b><small id="t'+s.id+'"></small>'+(s.id==='B'?'<small id="bB" style="display:block;margin-top:4px;color:#ff2d2d"></small>':'')+'</div>').join('');
+ $('cards').innerHTML=act.map(s=>'<div class="c"><small>'+s.name+'</small><small id="a'+s.id+'" style="display:block;color:#9aa"></small><b id="v'+s.id+'" style="color:'+s.color+'">–</b><small id="t'+s.id+'"></small>'+(s.id==='B'?'<small id="bB" style="display:block;margin-top:4px;color:#ff2d2d"></small>':'')+'</div>').join('');
 }
 function ns(u,k){ // zvládne URL s koncovým lomítkom, /api/..., ?token=..., bez https://
  u=(u||'').trim();if(!u)return null;
@@ -278,7 +279,7 @@ function render(fromSlider){
  chart.options.scales.x.min=r.start;chart.options.scales.x.max=r.end+(view.live?5*60e3:0);chart.update();
  const win={};act.forEach(s=>win[s.id]=(DATA[s.id]||[]).filter(p=>p.x>=r.start&&p.x<=r.end));
  const blood=bloodAll.filter(p=>p.t>=r.start&&p.t<=r.end);
- act.forEach(s=>{const d=DATA[s.id]||[],l=d[d.length-1];$('v'+s.id).textContent=l?fmt(l.y):'–';$('t'+s.id).textContent=l?hm(l.x):''});
+ act.forEach(s=>{const d=DATA[s.id]||[],l=d[d.length-1];$('a'+s.id).textContent=age(s);$('a'+s.id).style.color=(Date.now()-s.start)/864e5>s.life?'#ff8a65':'#9aa';$('v'+s.id).textContent=l?fmt(l.y):'–';$('t'+s.id).textContent=l?hm(l.x):''});
  const lb=bloodAll[bloodAll.length-1];if($('bB'))$('bB').textContent=lb?'◆ krv '+fmt(toU(lb.mg))+' ('+hm(lb.t)+')':'◆ krv: žiadne merania';
  cmpBlood(blood,act,DATA);
  pairStats(act,DATA,bloodAll,DATA); // MARD zo všetkých meraní, nezávisle od okna
