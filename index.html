@@ -352,7 +352,7 @@ function analyze(){
   });
   const sc=s=>'<span style="color:'+s.color+'">'+s.name+'</span>';
   const f0=t=>new Date(t).toLocaleString('sk',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
-  let h='<div style="color:#9aa;margin-bottom:6px">Referencia: <b>'+sc(ref)+'</b> · obdobie od '+f0(t0)+' · udalostí (rýchla zmena ≥ 1,5 jednotky/mmol): '+evs.length+'</div>';
+  let h='<div style="color:#9aa;margin-bottom:6px">Referencia: <b>'+sc(ref)+'</b> · obdobie od '+f0(t0)+' · udalostí (rýchla zmena ≥ 1,5 mmol/L): '+evs.length+'</div>';
   h+='<div style="overflow-x:auto"><table><tr><th>Senzor</th><th>Oneskorenie celkom</th><th>pri náraste</th><th>pri páde</th><th>σ rozdielu<br><small>bez posunu → s posunom</small></th><th>Ø rozdiel</th><th>korelácia sklonov</th><th>medián z udalostí<br><small>nárast / pád, orientačne</small></th></tr>';
   res.forEach(r=>{
    const a=r.all;
