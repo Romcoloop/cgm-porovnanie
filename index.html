@@ -49,7 +49,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#789;font-size:11px">verzia 12.11. 09:15</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#789;font-size:11px">verzia 12.11. 09:25</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -65,7 +65,6 @@
  <div class="r">
   <div><label>Referenčný senzor</label><select id="anRef"></select></div>
   <div><label>Obdobie</label><select id="anWin"><option value="24">Posledných 24 h</option><option value="48">Posledných 48 h</option><option value="96">Posledné 4 dni</option><option value="all" selected>Všetko</option></select></div>
-  <div><label>Zahrievanie</label><select id="anSkip"><option value="1">Vynechať prvých 24 h senzora</option><option value="0">Použiť všetky dáta</option></select></div>
  </div>
  <div id="anOut" style="font-size:13px;margin-top:8px"></div>
 </details>
@@ -99,7 +98,7 @@ const SENS=[{id:'A',name:'Sibionics GS3',color:'#4fc3f7',def:'juggluco',life:14,
             {id:'B',name:'Dexcom G6',color:'#ffb74d',def:'xdrip',life:10,start:Date.UTC(2026,10,6,21,0)},
             {id:'C',name:'Dexcom ONE+',color:'#ba68c8',def:'dexcom',life:10,start:Date.UTC(2026,10,10,17,30)}]; // ONE+ štart 10.11.2026 ~18:30 SEČ (odhad)
 const age=s=>{const d=Math.max(0,(Date.now()-s.start)/864e5);return d.toFixed(1).replace('.',',')+' / '+s.life+' dní'};
-const F=['mode','unit','hrs','flt','anRef','anWin','anSkip'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]));
+const F=['mode','unit','hrs','flt','anRef','anWin'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]));
 const q=new URLSearchParams(location.search);
 let S={};try{S=JSON.parse(localStorage.getItem('cgm')||'{}')}catch(e){}
 F.forEach(f=>{if(q.get(f))S[f]=q.get(f);if(S[f]!=null)$(f).value=S[f]});
@@ -334,7 +333,7 @@ function analyze(){
   const act=active();
   if(act.length<2){out.innerHTML='<span style="color:#9aa">Na analýzu treba aspoň dva senzory.</span>';return}
   const ref=act.find(s=>s.id===$('anRef').value)||act[0],others=act.filter(s=>s!==ref);
-  const now=Date.now(),w=$('anWin').value,skip=$('anSkip').value==='1';
+  const now=Date.now(),w=$('anWin').value,skip=true;
   let t0=w==='all'?MIN_FROM:now-(+w)*36e5;t0=Math.floor(Math.max(t0,MIN_FROM,now-10*864e5)/60e3)*60e3;
   const n=Math.floor((now-t0)/60e3)+1;
   const R=anSeries(ref,t0,n,skip),slope=anSlope(R);
@@ -361,7 +360,7 @@ function analyze(){
     +(r.upE.length?(med(r.upE)>0?'+':'')+med(r.upE).toFixed(0)+' min':'–')+' / '+(r.dnE.length?(med(r.dnE)>0?'+':'')+med(r.dnE).toFixed(0)+' min':'–')+'</td></tr>';
   });
   h+='</table></div>';
-  if(res.every(r=>!r.all))h+='<div style="color:#9aa;margin-top:6px">Málo prekrývajúcich sa dát (po vynechaní zahrievania). Skús obdobie „Všetko“ alebo vypnúť vynechanie prvých 24 h.</div>';
+  if(res.every(r=>!r.all))h+='<div style="color:#9aa;margin-top:6px">Málo prekrývajúcich sa dát (po vynechaní zahrievania). Skús obdobie „Všetko“ alebo počkaj, kým senzory prekonajú prvých 24 h.</div>';
   if(evs.length){
    h+='<div style="margin-top:10px;color:#9aa">Posledné udalosti: čas, že senzor dosiahol 50 % zmeny, oproti referencii (+ = neskôr), a veľkosť zmeny voči referencii.</div><div style="overflow-x:auto"><table><tr><th>Udalosť</th><th>Zmena ref.</th>'+res.map(r=>'<th>'+sc(r.s)+'</th>').join('')+'</tr>';
    evs.map((ev,i)=>i).reverse().slice(0,15).forEach(i=>{
@@ -371,7 +370,7 @@ function analyze(){
    });
    h+='</table></div>';
   }
-  h+='<div style="margin-top:10px;font-size:12px;color:#789">Oneskorenie = o koľko minút treba posunúť senzor, aby sa najlepšie zhodoval s referenciou (+ = senzor reaguje neskôr, − = skôr). Ide o relatívne porovnanie medzi senzormi, nie o oneskorenie voči skutočnej glykémii. Nárast/pád = úseky, kde sa referencia mení rýchlejšie ako 0,05 mmol/L/min. Čísla sú spoľahlivé až pri desiatkach takýchto úsekov; prvých 24 h po nalepení sa štandardne vynecháva.</div>';
+  h+='<div style="margin-top:10px;font-size:12px;color:#789">Oneskorenie = o koľko minút treba posunúť senzor, aby sa najlepšie zhodoval s referenciou (+ = senzor reaguje neskôr, − = skôr). Ide o relatívne porovnanie medzi senzormi, nie o oneskorenie voči skutočnej glykémii. Nárast/pád = úseky, kde sa referencia mení rýchlejšie ako 0,05 mmol/L/min. Čísla sú spoľahlivé až pri desiatkach takýchto úsekov; prvých 24 h po nalepení každého senzora sa vždy vynecháva.</div>';
   out.innerHTML=h;
  }catch(e){out.textContent='Chyba analýzy: '+e.message}
 }
@@ -443,7 +442,7 @@ $('nn').onclick=()=>{view.live=true;render()};
  cv.addEventListener('pointermove',e=>{if(!d)return;view.end=d.end-(e.clientX-d.x)/d.px*d.w;view.live=false;sched()});
  ['pointerup','pointercancel'].forEach(n=>cv.addEventListener(n,()=>{d=null}));
 })();
-['anRef','anWin','anSkip'].forEach(i=>{$(i).onchange=()=>{save();analyze()}});
+['anRef','anWin'].forEach(i=>{$(i).onchange=()=>{save();analyze()}});
 $('go').onclick=start;$('unit').onchange=start;$('flt').onchange=()=>{save();if(chart){setChartData(active());render()}};$('hrs').onchange=()=>{save();render()};
 start();
 </script>
