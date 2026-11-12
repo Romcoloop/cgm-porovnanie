@@ -49,7 +49,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#789;font-size:11px">verzia 12.11. 09:25</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#789;font-size:11px">verzia 12.11. 21:50</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -227,17 +227,17 @@ function cmpBlood(blood,act,data){
  const rows=blood.map(p=>{
   const u=toU(p.mg);
   const t=new Date(p.t).toLocaleString('sk',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
-  const cells=act.map(s=>{const g=near(data[s.id],p.t,10*60e3);return '<span style="color:'+s.color+'">'+s.name.split(' ').pop()+' '+(g?fmt(g.y)+' ('+sg(g.y-u)+')':'–')+'</span>'}).join(' | ');
+  const cells=act.map(s=>{const g=near(data[s.id],p.t,5*60e3),wu=p.t<s.start+24*36e5?'*':'';return '<span style="color:'+s.color+'">'+s.name.split(' ').pop()+' '+(g?fmt(g.y)+' ('+sg(g.y-u)+')'+wu:'–')+'</span>'}).join(' | ');
   return '<div>'+t+' | krv <b>'+fmt(u)+'</b> | '+cells+'</div>';
  });
  $('bList').innerHTML=rows.reverse().join('')||'Zatiaľ žiadne merania z krvi.';
- $('bCmp').textContent='V zátvorke je odchýlka senzora od krvi; berie sa najbližšia hodnota senzora do 10 minút. Glukomery majú aj samy odchýlku.';
+ $('bCmp').textContent='V zátvorke je odchýlka senzora od krvi; berie sa najbližšia hodnota senzora do 5 minút. Hviezdička * = meranie v prvých 24 h senzora (do MARD sa nerátá). Glukomery majú aj samy odchýlku.';
 }
 function pairStats(act,data,blood,full){
  const out=[];
  if(blood.length){
-  const stat=arr=>{
-   const d=[];for(const p of blood){const g=near(arr,p.t,10*60e3);if(g)d.push([g.y,toU(p.mg)])}
+  const stat=(arr,sen)=>{
+   const d=[];for(const p of blood){if(p.t<sen.start+24*36e5)continue;const g=near(arr,p.t,5*60e3);if(g)d.push([g.y,toU(p.mg)])}
    if(!d.length)return null;
    const n=d.length;
    const bias=d.reduce((a,x)=>a+x[0]-x[1],0)/n;
@@ -246,9 +246,9 @@ function pairStats(act,data,blood,full){
   };
   act.forEach(s=>{
    const src=(full||data)[s.id]||[];
-   const txt=stat(src);
+   const txt=stat(src,s);
    if(!txt)return;
-   out.push('<div style="color:'+s.color+'"><b>'+s.name+' vs krv</b>: '+txt+'</div>');
+   out.push('<div style="color:'+s.color+'"><b>'+s.name+' vs krv</b> (bez prvých 24 h): '+txt+'</div>');
   });
  }
  $('pair').innerHTML=out.join('')||'<span style="color:#9aa">Štatistika sa zobrazí, keď budú merania z krvi.</span>';
