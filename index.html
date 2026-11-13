@@ -49,7 +49,7 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#789;font-size:11px">verzia 12.11. 21:50</small></h1>
+<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#789;font-size:11px">verzia 13.11. 14:15</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -97,7 +97,28 @@ const $=id=>document.getElementById(id);
 const SENS=[{id:'A',name:'Sibionics GS3',color:'#4fc3f7',def:'juggluco',life:14,start:Date.UTC(2026,10,6,21,0)}, // štart senzora (UTC); 6.11.2026 22:00 SEČ
             {id:'B',name:'Dexcom G6',color:'#ffb74d',def:'xdrip',life:10,start:Date.UTC(2026,10,6,21,0)},
             {id:'C',name:'Dexcom ONE+',color:'#ba68c8',def:'dexcom',life:10,start:Date.UTC(2026,10,10,17,30)}]; // ONE+ štart 10.11.2026 ~18:30 SEČ (odhad)
-const age=s=>{const d=Math.max(0,(Date.now()-s.start)/864e5);return d.toFixed(1).replace('.',',')+' / '+s.life+' dní'};
+// Dexcom ONE+ boli dva kusy: č. 1 (7247, pravdepodobne chybný) a č. 2 (1580). Štatistiky sa počítajú pre každý zvlášť.
+const C_SN=['7247','1580'];
+const C2_START=null; // presný štart senzora 1580 (Date.UTC(...)); null = zistí sa z dát (prvá medzera ≥ 20 min po C2_AFTER)
+const C2_AFTER=Date.UTC(2026,10,13,11,0); // výmena najskôr 13.11.2026 12:00 SEČ
+let C2=null; // {end1: posledná hodnota senzora 7247, start: štart senzora 1580}
+function detectC2(){
+ const d=DATA.C||[];
+ if(C2_START){let e=SENS[2].start;for(const p of d){if(p.x<C2_START)e=p.x;else break}C2={end1:e,start:C2_START}}
+ else{C2=null;for(let i=1;i<d.length;i++)if(d[i].x>C2_AFTER&&d[i].x-d[i-1].x>=20*60e3){C2={end1:d[i-1].x,start:d[i].x-30*60e3};break}} // 30 min zahrievanie
+ const i=NOTES.findIndex(n=>n.c2);if(i>=0)NOTES.splice(i,1);
+ if(C2)NOTES.push({c2:1,t:C2.start,text:'ONE+: nový senzor '+C_SN[1]});
+}
+// časti senzora: {name, short, start, hi}; platné dáta časti sú v intervale <start, hi)
+function parts(s){
+ if(s.id!=='C')return[{name:s.name,short:s.name.split(' ').pop(),start:s.start,hi:Infinity}];
+ const a=[{name:s.name+' č. 1 ('+C_SN[0]+')',short:'ONE+¹',start:s.start,hi:C2?C2.end1+1:Infinity}];
+ a.push({name:s.name+' č. 2 ('+C_SN[1]+')',short:'ONE+²',start:C2?C2.start:Infinity,hi:Infinity});
+ return a;
+}
+const partAt=(s,t)=>{const a=parts(s);for(let i=a.length-1;i>=0;i--)if(t>=a[i].start)return a[i];return a[0]};
+const curStart=s=>s.id==='C'&&C2?C2.start:s.start;
+const age=s=>{const d=Math.max(0,(Date.now()-curStart(s))/864e5);return (s.id==='C'?'č. '+(C2?2:1)+' ('+C_SN[C2?1:0]+') · ':'')+d.toFixed(1).replace('.',',')+' / '+s.life+' dní'};
 const F=['mode','unit','hrs','flt','anRef','anWin'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]));
 const q=new URLSearchParams(location.search);
 let S={};try{S=JSON.parse(localStorage.getItem('cgm')||'{}')}catch(e){}
@@ -238,17 +259,17 @@ function cmpBlood(blood,act,data){
  const rows=blood.map(p=>{
   const u=toU(p.mg);
   const t=new Date(p.t).toLocaleString('sk',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
-  const cells=act.map(s=>{const g=near(data[s.id],p.t,5*60e3),wu=p.t<s.start+24*36e5?'*':'';return '<span style="color:'+s.color+'">'+s.name.split(' ').pop()+' '+(g?fmt(g.y)+' ('+sg(g.y-u)+')'+wu:'–')+'</span>'}).join(' | ');
+  const cells=act.map(s=>{const g=near(data[s.id],p.t,5*60e3),pt=partAt(s,p.t),wu=p.t<pt.start+24*36e5?'*':'';return '<span style="color:'+s.color+'">'+pt.short+' '+(g?fmt(g.y)+' ('+sg(g.y-u)+')'+wu:'–')+'</span>'}).join(' | ');
   return '<div>'+t+' | krv <b>'+fmt(u)+'</b> | '+cells+'</div>';
  });
  $('bList').innerHTML=rows.reverse().join('')||'Zatiaľ žiadne merania z krvi.';
- $('bCmp').textContent='V zátvorke je odchýlka senzora od krvi; berie sa najbližšia hodnota senzora do 5 minút. Hviezdička * = meranie v prvých 24 h senzora (do MARD sa nerátá). Glukomery majú aj samy odchýlku.';
+ $('bCmp').textContent='V zátvorke je odchýlka senzora od krvi; berie sa najbližšia hodnota senzora do 5 minút. Hviezdička * = meranie v prvých 24 h senzora (do MARD sa nerátá). ONE+¹ = prvý senzor (7247), ONE+² = druhý senzor (1580). Glukomery majú aj samy odchýlku.';
 }
 function pairStats(act,data,blood,full){
  const out=[];
  if(blood.length){
   const stat=(arr,sen)=>{
-   const d=[];for(const p of blood){if(p.t<sen.start+24*36e5)continue;const g=near(arr,p.t,5*60e3);if(g)d.push([g.y,toU(p.mg)])}
+   const d=[];for(const p of blood){if(p.t<sen.start+24*36e5||p.t>=sen.hi+5*60e3)continue;const g=near(arr,p.t,5*60e3);if(g&&g.x>=sen.start&&g.x<sen.hi)d.push([g.y,toU(p.mg)])}
    if(!d.length)return null;
    const n=d.length;
    const bias=d.reduce((a,x)=>a+x[0]-x[1],0)/n;
@@ -257,9 +278,11 @@ function pairStats(act,data,blood,full){
   };
   act.forEach(s=>{
    const src=(full||data)[s.id]||[];
-   const txt=stat(src,s);
-   if(!txt)return;
-   out.push('<div style="color:'+s.color+'"><b>'+s.name+' vs krv</b> (bez prvých 24 h): '+txt+'</div>');
+   parts(s).forEach(pt=>{
+    const txt=stat(src,pt);
+    if(txt)out.push('<div style="color:'+s.color+'"><b>'+pt.name+' vs krv</b> (bez prvých 24 h): '+txt+'</div>');
+    else if(s.id==='C')out.push('<div style="color:'+s.color+';opacity:.7"><b>'+pt.name+' vs krv</b>: '+(pt.start===Infinity?'čaká sa na prvé dáta nového senzora':'zatiaľ žiadne merania z krvi po prvých 24 h')+'</div>');
+   });
   });
  }
  $('pair').innerHTML=out.join('')||'<span style="color:#9aa">Štatistika sa zobrazí, keď budú merania z krvi.</span>';
@@ -268,9 +291,9 @@ function pairStats(act,data,blood,full){
 const AN_THR=.05,AN_MAXL=30; // prah zmeny 0,05 mmol/L/min (~0,9 mg/dL/min), max posun ±30 min
 const mmol=v=>$('unit').value==='mmol'?v:v/MG;
 const dsp=v=>$('unit').value==='mmol'?v.toFixed(1):String(Math.round(v*MG));
-function anSeries(s,t0,n,skip){ // 1-min mriežka v mmol/L: centrovaný 5-min priemer + lineárna interpolácia (diery > 12 min ostanú prázdne)
- const lo=Math.max(t0,skip?s.start+24*36e5:0);
- const pts=(DATA[s.id]||[]).filter(p=>p.x>=lo);
+function anSeries(s,t0,n,skip,only){ // 1-min mriežka v mmol/L: centrovaný 5-min priemer + lineárna interpolácia (diery > 12 min ostanú prázdne)
+ const ps=only?[only]:parts(s);
+ const pts=(DATA[s.id]||[]).filter(p=>p.x>=t0&&ps.some(q=>p.x>=q.start+(skip?24*36e5:0)&&p.x<q.hi));
  const out=new Float64Array(n).fill(NaN);
  if(pts.length<2)return out;
  const sm=[];let a=0,b=0,sum=0;
@@ -343,7 +366,8 @@ function analyze(){
  try{
   const act=active();
   if(act.length<2){out.innerHTML='<span style="color:#9aa">Na analýzu treba aspoň dva senzory.</span>';return}
-  const ref=act.find(s=>s.id===$('anRef').value)||act[0],others=act.filter(s=>s!==ref);
+  const ref=act.find(s=>s.id===$('anRef').value)||act[0],others=[];
+  act.filter(s=>s!==ref).forEach(s=>parts(s).forEach(pt=>others.push({id:s.id,color:s.color,name:pt.name,pt})));
   const now=Date.now(),w=$('anWin').value,skip=true;
   let t0=w==='all'?MIN_FROM:now-(+w)*36e5;t0=Math.floor(Math.max(t0,MIN_FROM,now-10*864e5)/60e3)*60e3;
   const n=Math.floor((now-t0)/60e3)+1;
@@ -352,7 +376,7 @@ function analyze(){
   for(let m=0;m<n;m++){if(slope[m]>AN_THR)rise[m]=1;else if(slope[m]<-AN_THR)fall[m]=1}
   const evs=anEvents(R,slope),rx=evs.map(ev=>anCross(R,ev));
   const res=others.map(s=>{
-   const O=anSeries(s,t0,n,skip),os=anSlope(O);
+   const O=anSeries(s,t0,n,skip,s.pt),os=anSlope(O);
    let c=0,sx=0,sy=0,sxx=0,syy=0,sxy=0;
    for(let m=0;m<n;m++){const x=slope[m],y=os[m];if(Number.isFinite(x)&&Number.isFinite(y)){c++;sx+=x;sy+=y;sxx+=x*x;syy+=y*y;sxy+=x*y}}
    const cor=c>60?(c*sxy-sx*sy)/Math.sqrt((c*sxx-sx*sx)*(c*syy-sy*sy)):NaN;
@@ -381,7 +405,7 @@ function analyze(){
    });
    h+='</table></div>';
   }
-  h+='<div style="margin-top:10px;font-size:12px;color:#789">Oneskorenie = o koľko minút treba posunúť senzor, aby sa najlepšie zhodoval s referenciou (+ = senzor reaguje neskôr, − = skôr). Ide o relatívne porovnanie medzi senzormi, nie o oneskorenie voči skutočnej glykémii. Nárast/pád = úseky, kde sa referencia mení rýchlejšie ako 0,05 mmol/L/min. Čísla sú spoľahlivé až pri desiatkach takýchto úsekov; prvých 24 h po nalepení každého senzora sa vždy vynecháva.</div>';
+  h+='<div style="margin-top:10px;font-size:12px;color:#789">Oneskorenie = o koľko minút treba posunúť senzor, aby sa najlepšie zhodoval s referenciou (+ = senzor reaguje neskôr, − = skôr). Ide o relatívne porovnanie medzi senzormi, nie o oneskorenie voči skutočnej glykémii. Nárast/pád = úseky, kde sa referencia mení rýchlejšie ako 0,05 mmol/L/min. Čísla sú spoľahlivé až pri desiatkach takýchto úsekov; prvých 24 h po nalepení každého senzora sa vždy vynecháva. Dexcom ONE+ je rozdelený na prvý senzor (7247) a druhý senzor (1580).</div>';
   out.innerHTML=h;
  }catch(e){out.textContent='Chyba analýzy: '+e.message}
 }
@@ -413,6 +437,7 @@ async function tick(){
   });
   if(act.length>1&&$('mode').value==='two'){const a=$('uA').value.trim(),b=$('uB').value.trim();if(a&&b&&a===b)errs.push('GS3 aj G6 majú nastavený rovnaký zdroj');}
   try{bloodAll=await getBG(MIN_FROM)}catch(e){}
+  detectC2();
   setChartData(act);
   render();
   analyze();
