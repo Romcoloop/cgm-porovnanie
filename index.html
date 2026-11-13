@@ -126,7 +126,18 @@ function mk(){
  ds.push({label:'Hodnota BG z prsta',borderColor:'#fff',backgroundColor:'#ff2d2d',borderWidth:2,data:[],showLine:false,pointStyle:'rectRot',pointRadius:8,pointHoverRadius:10});
  ds.push({label:'GS3 surové',borderColor:'rgba(79,195,247,.3)',backgroundColor:'rgba(79,195,247,.3)',data:[],showLine:true,pointRadius:0,tension:0,borderWidth:1,order:5}); // slabá surová čiara pod vyhladenou
  chart=new Chart($('ch'),{type:'scatter',data:{datasets:ds},
-  plugins:[{id:'notes',afterDatasetsDraw(c){
+  plugins:[{id:'range',beforeDatasetsDraw(c){ // vodorovné hranice cieľového pásma 4,0 a 10,0 mmol/L
+   const y=c.scales.y,a=c.chartArea,g=c.ctx;
+   [[4,'#ff5252'],[10,'#ffca28']].forEach(([v,col])=>{
+    const val=mm?v:Math.round(v*MG),py=y.getPixelForValue(val);
+    if(py<a.top||py>a.bottom)return;
+    g.save();g.strokeStyle=col;g.globalAlpha=.8;g.lineWidth=1.5;g.setLineDash([8,5]);
+    g.beginPath();g.moveTo(a.left,py);g.lineTo(a.right,py);g.stroke();g.setLineDash([]);
+    g.globalAlpha=1;g.font='11px system-ui,sans-serif';g.fillStyle=col;g.textBaseline='bottom';g.textAlign='right';
+    g.fillText(mm?v.toFixed(1).replace('.',','):String(val),a.right-4,py-2);
+    g.restore();
+   });
+  }},{id:'notes',afterDatasetsDraw(c){
    const x=c.scales.x,a=c.chartArea,g=c.ctx;
    NOTES.forEach(n=>{
     if(n.t<x.min||n.t>x.max)return;
