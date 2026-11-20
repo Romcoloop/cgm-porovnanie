@@ -49,10 +49,10 @@
 </style>
 </head>
 <body><div class="w">
-<h1>Porovnanie CGM naživo: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#789;font-size:11px">verzia 13.11. 14:15</small></h1>
+<h1>Porovnanie CGM: Sibionics GS3 · Dexcom G6 · Dexcom ONE+ <small style="font-weight:400;color:#ffb74d;font-size:12px">test ukončený 20.11.2026 o 8:15</small></h1>
 <div class="cards" id="cards"></div>
 <div id="box"><canvas id="ch"></canvas></div>
-<div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
+<div id="nav"><button id="nb" class="nv" type="button">◀</button><input id="nsl" type="range"><button id="nf" class="nv" type="button">▶</button><button id="nn" class="nv" type="button">Koniec</button></div>
 <div id="nlab"></div>
 <div id="st"></div>
 <div id="pair"></div>
@@ -118,17 +118,18 @@ function parts(s){
 }
 const partAt=(s,t)=>{const a=parts(s);for(let i=a.length-1;i>=0;i--)if(t>=a[i].start)return a[i];return a[0]};
 const curStart=s=>s.id==='C'&&C2?C2.start:s.start;
-const age=s=>{const d=Math.max(0,(Date.now()-curStart(s))/864e5);return (s.id==='C'?'č. '+(C2?2:1)+' ('+C_SN[C2?1:0]+') · ':'')+d.toFixed(1).replace('.',',')+' / '+s.life+' dní'};
+const age=s=>{const d=Math.max(0,(NOW()-curStart(s))/864e5);return (s.id==='C'?'č. '+(C2?2:1)+' ('+C_SN[C2?1:0]+') · ':'')+d.toFixed(1).replace('.',',')+' / '+s.life+' dní'};
 const F=['mode','unit','hrs','flt','anRef','anWin'].concat(...SENS.map(s=>['u'+s.id,'k'+s.id,'d'+s.id]));
 const q=new URLSearchParams(location.search);
 let S={};try{S=JSON.parse(localStorage.getItem('cgm')||'{}')}catch(e){}
 F.forEach(f=>{if(q.get(f))S[f]=q.get(f);if(S[f]!=null)$(f).value=S[f]});
-const PROXY='https://cgm-proxy.krajcovicroman.workers.dev';
-$('uA').value=PROXY+'/a';$('uB').value=PROXY+'/b';$('uC').value=PROXY+'/c'; // dáta idú cez worker, Nightscout nie je verejný
+$('uA').value='data/a';$('uB').value='data/b';$('uC').value='data/c'; // uložená kópia dát v repozitári (data/*.json), nezávislá od Nightscoutu a workera
 if(q.get('edit'))$('adm').style.display='block';
 const MG=18.0182;
 const NOTES=[]; // poznámky v grafe: {t:Date.UTC(...),text:'...'}
 const MIN_FROM=Date.UTC(2026,10,6,21,0,0); // 6.11.2026 22:00 SEČ = 21:00 UTC
+const END=Date.UTC(2026,10,20,7,15,0); // koniec testu 20.11.2026 08:15 SEČ = 07:15 UTC
+const NOW=()=>END; // test je ukončený: stránka je zmrazená na koncový čas a číta uloženú kópiu dát z priečinka data/
 const toU=v=>$('unit').value==='mmol'?v/MG:v;
 const fmt=v=>$('unit').value==='mmol'?v.toFixed(1):Math.round(v);
 const sg=v=>(v>=0?'+':'')+fmt(v);
@@ -189,11 +190,11 @@ function ns(u,k){ // zvládne URL s koncovým lomítkom, /api/..., ?token=..., b
 }
 async function get(u,k,from,quiet){
  const b=(u||'').trim().replace(/\/+$/,'');if(!b)return[];
- const url=b+'/sgv?count='+Math.min(30000,Math.max(1000,Math.round(((Date.now()-from)/3600e3)*130)))+'&from='+from;
+ const url=b+'.json';
  let r;try{r=await fetch(url)}catch(e){throw new Error('spojenie zlyhalo ('+e.message+')')}
  if(quiet&&(r.status===404||r.status===500))return[]; // ONE+ cesta ešte nie je nastavená vo workeri
  if(!r.ok)throw new Error('HTTP '+r.status);
- return r.json();
+ return (await r.json()).filter(e=>e.date>=from&&e.date<=END);
 }
 async function getBG(from){
  const one=$('mode').value==='one';
@@ -203,15 +204,15 @@ async function getBG(from){
  const conv=g=>(+g<35?+g*MG:+g);
  const out=[];
  try{
-  const r=await fetch(base+'/mbg?count=200&from='+from);
+  const r=await fetch('data/mbg.json');
   if(r.ok)(await r.json()).forEach(e=>{const v=+e.mbg;if(v>0)out.push({t:e.date||new Date(e.dateString).getTime(),mg:conv(v)})});
  }catch(e){}
  try{
-  const r=await fetch(base+'/bg?count=200&from='+from);
+  const r=await fetch('data/bg.json');
   if(r.ok)(await r.json()).forEach(t=>{const v=+t.glucose;if(v>0){const m=/mmol/i.test(t.units||'');out.push({t:new Date(t.created_at||t.timestamp).getTime(),mg:m?v*MG:conv(v)})}});
  }catch(e){}
  out.sort((p,q)=>p.t-q.t);
- return out.filter((p,i)=>!i||Math.abs(p.t-out[i-1].t)>2*60e3); // duplicity (mbg + treatment)
+ return out.filter(p=>p.t>=from&&p.t<=END).filter((p,i)=>!i||Math.abs(p.t-out[i-1].t)>2*60e3); // duplicity (mbg + treatment)
 }
 // ---- filtre podľa princípu AAPS (Smoothing) ----
 // Exponential: Holtov dvojitý exponenciálny filter (úroveň + trend), nemá takmer žiadne oneskorenie.
@@ -368,7 +369,7 @@ function analyze(){
   if(act.length<2){out.innerHTML='<span style="color:#9aa">Na analýzu treba aspoň dva senzory.</span>';return}
   const ref=act.find(s=>s.id===$('anRef').value)||act[0],others=[];
   act.filter(s=>s!==ref).forEach(s=>parts(s).forEach(pt=>others.push({id:s.id,color:s.color,name:pt.name,pt})));
-  const now=Date.now(),w=$('anWin').value,skip=true;
+  const now=NOW(),w=$('anWin').value,skip=true;
   let t0=w==='all'?MIN_FROM:now-(+w)*36e5;t0=Math.floor(Math.max(t0,MIN_FROM,now-10*864e5)/60e3)*60e3;
   const n=Math.floor((now-t0)/60e3)+1;
   const R=anSeries(ref,t0,n,skip),slope=anSlope(R);
@@ -413,7 +414,7 @@ function analyze(){
 let cache={},last={},DATA={},bloodAll=[],view={live:true,end:0},raf=0;
 const W=()=>(+$('hrs').value||6)*3600e3;
 function viewRange(){
- const now=Date.now(),w=W(),lo=Math.min(MIN_FROM+w,now);
+ const now=NOW(),w=W(),lo=Math.min(MIN_FROM+w,now);
  let end=view.live?now:Math.min(Math.max(view.end,lo),now);
  if(!view.live&&end>=now-60e3){view.live=true;end=now}
  return{now,w,lo,end,start:Math.max(end-w,MIN_FROM)};
@@ -422,7 +423,7 @@ const fromFor=id=>last[id]?Math.max(last[id]-60*60e3,MIN_FROM):MIN_FROM;
 function merge(id,arr){const m=cache[id]||(cache[id]=new Map());(arr||[]).forEach(e=>{if(e&&e.sgv>0&&e.date)m.set(e.date,e)})}
 async function tick(){
  try{
-  const act=active(),raw={},errs=[],t0=Date.now();
+  const act=active(),raw={},errs=[],t0=NOW();
   if($('mode').value==='two'){
    const res=await Promise.allSettled(act.map(s=>get($('u'+s.id).value,$('k'+s.id).value,fromFor(s.id),s.id==='C')));
    act.forEach((s,i)=>{if(res[i].status==='fulfilled'){raw[s.id]=res[i].value;last[s.id]=t0}else{raw[s.id]=[];errs.push(s.name+': '+res[i].reason.message)}});
@@ -441,7 +442,7 @@ async function tick(){
   setChartData(act);
   render();
   analyze();
-  $('st').textContent=(errs.length?'Chyba – '+errs.join(' | ')+'. ':'')+'Aktualizované '+new Date().toLocaleTimeString('sk')+' (každých 60 s)';
+  $('st').textContent=(errs.length?'Chyba – '+errs.join(' | ')+'. ':'')+'Test ukončený 20. 11. 2026 o 8:15. Zobrazené sú uložené dáta celého testu.';
  }catch(e){$('st').textContent='Chyba: '+e.message+' (skontroluj URL, token, CORS)'}
 }
 function render(fromSlider){
@@ -450,14 +451,14 @@ function render(fromSlider){
  chart.options.scales.x.min=r.start;chart.options.scales.x.max=r.end+(view.live?5*60e3:0);chart.update();
  const win={};act.forEach(s=>win[s.id]=(DATA[s.id]||[]).filter(p=>p.x>=r.start&&p.x<=r.end));
  const blood=bloodAll.filter(p=>p.t>=r.start&&p.t<=r.end);
- act.forEach(s=>{const d=DATA[s.id]||[],l=d[d.length-1];$('a'+s.id).textContent=age(s);$('a'+s.id).style.color=(Date.now()-s.start)/864e5>s.life?'#ff8a65':'#9aa';$('v'+s.id).textContent=l?fmt(l.y):'–';$('t'+s.id).textContent=l?hm(l.x):''});
+ act.forEach(s=>{const d=DATA[s.id]||[],l=d[d.length-1];$('a'+s.id).textContent=age(s);$('a'+s.id).style.color=(NOW()-s.start)/864e5>s.life?'#ff8a65':'#9aa';$('v'+s.id).textContent=l?fmt(l.y):'–';$('t'+s.id).textContent=l?hm(l.x):''});
  const lb=bloodAll[bloodAll.length-1];if($('bB'))$('bB').textContent=lb?'◆ krv '+fmt(toU(lb.mg))+' ('+hm(lb.t)+')':'◆ krv: žiadne merania';
  cmpBlood(blood,act,DATA);
  pairStats(act,DATA,bloodAll,DATA); // MARD zo všetkých meraní, nezávisle od okna
  const sl=$('nsl');sl.min=r.lo;sl.max=r.now;sl.step=60000;sl.disabled=r.lo>=r.now;if(!fromSlider)sl.value=r.end;
  $('nn').style.opacity=view.live?.5:1;
  const f=t=>new Date(t).toLocaleString('sk',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
- $('nlab').textContent=f(r.start)+' – '+f(r.end)+(view.live?' (naživo)':'');
+ $('nlab').textContent=f(r.start)+' – '+f(r.end)+(view.live?' (koniec testu)':'');
 }
 const sched=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;render()})};
 function save(){try{F.forEach(f=>S[f]=$(f).value);localStorage.setItem('cgm',JSON.stringify(S))}catch(e){}}
@@ -465,7 +466,7 @@ function start(){
  save();
  $('st').textContent='Načítavam…';
  cache={};last={};DATA={};bloodAll=[];
- try{mk();clearInterval(timer);tick();timer=setInterval(tick,60000)}catch(e){$('st').textContent='Chyba: '+e.message}
+ try{mk();clearInterval(timer);tick()}catch(e){$('st').textContent='Chyba: '+e.message}
 }
 // posúvanie v dátach
 $('nsl').oninput=()=>{view.end=+$('nsl').value;view.live=false;render(true)};
