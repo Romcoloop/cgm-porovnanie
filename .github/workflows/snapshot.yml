@@ -14,7 +14,7 @@ jobs:
         env:
           P: https://cgm-proxy.krajcovicroman.workers.dev
           FROM: 1793998800000
-          END: 1794208500000
+          END: 1795158900000
         run: |
           set -euo pipefail
           mkdir -p data
