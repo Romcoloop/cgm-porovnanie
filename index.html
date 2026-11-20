@@ -212,7 +212,8 @@ async function getBG(from){
   if(r.ok)(await r.json()).forEach(t=>{const v=+t.glucose;if(v>0){const m=/mmol/i.test(t.units||'');out.push({t:new Date(t.created_at||t.timestamp).getTime(),mg:m?v*MG:conv(v)})}});
  }catch(e){}
  out.sort((p,q)=>p.t-q.t);
- return out.filter(p=>p.t>=from&&p.t<=END).filter((p,i)=>!i||Math.abs(p.t-out[i-1].t)>2*60e3); // duplicity (mbg + treatment)
+ const o2=out.filter(p=>p.t>=from&&p.t<=END); // len obdobie testu
+ return o2.filter((p,i)=>!i||Math.abs(p.t-o2[i-1].t)>2*60e3); // duplicity (mbg + treatment)
 }
 // ---- filtre podľa princípu AAPS (Smoothing) ----
 // Exponential: Holtov dvojitý exponenciálny filter (úroveň + trend), nemá takmer žiadne oneskorenie.
