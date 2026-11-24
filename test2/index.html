@@ -70,7 +70,7 @@
 <div id="trial" hidden><b>Skúšobný pohľad.</b> Zobrazené sú posledné 3 dni zo všetkých pripojených zdrojov, bez ohľadu na štart senzora. Do výsledkov testu sa tento pohľad neráta.</div>
 <div class="cards" id="cards"></div>
 <div id="live" hidden>
-<div class="hint">Ťuknutím na kartu senzor v grafe skryješ alebo zobrazíš.</div>
+<div class="hint">Ťuknutím na kartu senzor v grafe skryješ alebo zobrazíš.<span id="fltNote"></span></div>
 <div id="box"><canvas id="ch"></canvas></div>
 <div id="rd"></div>
 <div id="nav"><button id="nb" class="nv" type="button" aria-label="Späť">◀</button><input id="nsl" type="range" aria-label="Posun v čase"><button id="nf" class="nv" type="button" aria-label="Dopredu">▶</button><button id="nn" class="nv" type="button">Teraz</button></div>
@@ -96,8 +96,9 @@
  <div class="r">
   <div><label for="unit">Jednotky</label><select id="unit"><option value="mmol">mmol/L</option><option value="mg">mg/dL</option></select></div>
   <div><label for="hrs">Okno (hod.)</label><select id="hrs"><option>3</option><option selected>6</option><option>12</option><option>24</option><option>72</option><option>168</option></select></div>
-  <div><label for="flt">Vyhladenie čiar v grafe</label><select id="flt"><option value="raw" selected>Surové dáta</option><option value="avg">Priemer (AAPS Average)</option><option value="exp">Exponenciálny (AAPS)</option></select></div>
+  <div><label for="sflt" id="sfltL">Filter GS3 (graf)</label><select id="sflt"><option value="avg" selected>Priemer (AAPS Average)</option><option value="exp">Exponenciálny (AAPS)</option><option value="raw">Surové dáta</option></select></div>
  </div>
+ <div class="note">Filter mení len čiaru v grafe a hodnotu odčítanú ťuknutím do grafu. MARD, tabuľka meraní z krvi aj analýza sa vždy rátajú zo surových dát.</div>
 </details>
 </div>
 <script>
@@ -113,12 +114,13 @@ const BG_SRC='b';   // cesta workera, kam chodia merania z prsta (AAPS → Night
 // Senzory v poradí zobrazenia. src = cesta workera (jeden Nightscout účet na senzor).
 // start = prvá hodnota senzora po zahriatí, v UTC (Date.UTC počíta mesiace od 0, november = 10; SEČ = UTC+1).
 // Senzor bez start ešte nebeží: v zozname je, ale jeho dáta sa nesťahujú ani nezobrazujú (v tom istom Nightscoute môže dobiehať starý senzor).
+// flt:true = čiara senzora sa v grafe predvolene vyhladzuje filtrom (surové dáta ostávajú tenkou čiarou pod ňou; štatistiky sú vždy zo surových).
 // Voliteľné: end (senzor skončil skôr), dev (časť názvu "device", ak dva senzory zdieľajú jeden Nightscout).
 const SENS=[
  {id:'one', name:'Dexcom ONE+',   short:'ONE+',     color:'#8e71f5',life:10,  src:'c'},
  {id:'ins', name:'Instara',       short:'Instara',  color:'#b9e769',life:null,src:'d'},
  {id:'syai',name:'Syai',          short:'Syai',     color:'#f89bb6',life:null,src:'e'},
- {id:'gs3', name:'Sibionics GS3', short:'GS3',      color:'#59bbfb',life:14,  src:'a',start:Date.UTC(2026,10,23,18,6)},  // prvá hodnota 23. 11. 19:06
+ {id:'gs3', name:'Sibionics GS3', short:'GS3',      color:'#59bbfb',life:14,  src:'a',flt:true,start:Date.UTC(2026,10,23,18,6)}, // prvá hodnota 23. 11. 19:06
  {id:'l2p', name:'Libre 2 Plus',  short:'Libre 2+', color:'#e8eaed',life:15,  src:'f'},
  {id:'ican',name:'iCan i5',       short:'iCan i5',  color:'#0e8f80',life:null,src:'g'},
  {id:'g6',  name:'Dexcom G6',     short:'G6',       color:'#c8741a',life:10,  src:'b',start:Date.UTC(2026,10,20,14,34)}, // prvá hodnota 20. 11. 15:34 (po 2 h zahrievaní)
@@ -129,7 +131,7 @@ const NOTES=[]; // zvislé poznámky v grafe: {t:Date.UTC(...),text:'...'}
 // ======================================================
 
 const MG=18.0182;
-const F=['unit','hrs','flt','anWin'];
+const F=['unit','hrs','sflt','anWin'];
 let S={};try{S=JSON.parse(localStorage.getItem('cgm2')||'{}')||{}}catch(e){}
 F.forEach(f=>{if(S[f]!=null)$(f).value=S[f]});
 const HID=new Set(Array.isArray(S.hid)?S.hid:[]);
@@ -207,10 +209,13 @@ const crossPlugin={id:'cross',afterDatasetsDraw(c){ // zvislá čiara vo zvoleno
  });
  g.restore();
 }};
+const FLT=SENS.filter(s=>s.flt); // senzory s filtrom v grafe
+const hexA=(h,a)=>'rgba('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(',')+','+a+')';
 function mk(){
  if(chart)chart.destroy();
  const ds=SENS.map(s=>({label:s.name,borderColor:s.color,backgroundColor:s.color,data:[],showLine:true,pointRadius:1.5,tension:.25,borderWidth:2,hidden:HID.has(s.id)}));
  ds.push({label:'Krv z prsta',borderColor:'#fff',backgroundColor:'#ff2d2d',borderWidth:2,data:[],showLine:false,pointStyle:'rectRot',pointRadius:8});
+ FLT.forEach(s=>{const c=hexA(s.color,.4);ds.push({label:s.name+' surové',borderColor:c,backgroundColor:c,data:[],showLine:true,pointRadius:0,tension:0,borderWidth:1,order:5})}); // slabá surová čiara pod vyhladenou
  chart=new Chart($('ch'),{type:'scatter',data:{datasets:ds},plugins:[rangePlugin,notesPlugin,crossPlugin],
   options:{animation:false,normalized:true,maintainAspectRatio:false,parsing:false,events:[],
    scales:{x:{type:'linear',afterBuildTicks:xTicks,ticks:{color:'#9aa7b0',callback:xLabel,maxRotation:0,autoSkipPadding:12},grid:{color:'#222b36'}},
@@ -294,14 +299,17 @@ function smoothAvg(pts,n=3){ // priemer posledných n hodnôt (len minulých, v 
  });
 }
 function setChartData(){
- const m=$('flt').value;
+ const m=$('sflt').value,shown=[];let r=SENS.length+1;
  SENS.forEach((s,i)=>{
-  const d=DATA[s.id]||[],ds=chart.data.datasets[i],k=Math.min(d.length-1,200);
-  ds.data=m==='avg'?smoothAvg(d):m==='exp'?smoothHolt(d):d;ds.hidden=HID.has(s.id);
+  const d=DATA[s.id]||[],ds=chart.data.datasets[i],k=Math.min(d.length-1,200),f=!!s.flt&&m!=='raw';
+  ds.data=f?(m==='avg'?smoothAvg(d):smoothHolt(d)):d;ds.hidden=HID.has(s.id);
   ds.pointRadius=k>0&&(d[d.length-1].x-d[d.length-1-k].x)/k<150e3?0:1.5; // husté (minútové) dáta bez bodiek, len čiara
+  if(s.flt){const raw=chart.data.datasets[r++];raw.data=f?d:[];raw.hidden=HID.has(s.id);if(f&&d.length&&!HID.has(s.id))shown.push(s.short)}
  });
  chart.data.datasets[SENS.length].data=bloodAll.map(p=>({x:p.t,y:toU(p.mg)}));
+ $('fltNote').textContent=shown.length?' Čiara '+shown.join(', ')+' je vyhladená filtrom, surové hodnoty sú tenká čiara pod ňou.':'';
 }
+const shownAt=(s,t)=>near(chart.data.datasets[SENS.indexOf(s)].data,t,5*60e3); // hodnota tak, ako je nakreslená v grafe
 function near(arr,t,w){ // arr zoradené podľa x; najbližší bod do vzdialenosti w
  let lo=0,hi=arr.length;
  while(lo<hi){const m=(lo+hi)>>1;if(arr[m].x<t)lo=m+1;else hi=m}
@@ -482,7 +490,7 @@ function readout(){ // hodnoty všetkých senzorov vo zvolenom čase
  if(cross==null){el.innerHTML='<span style="color:var(--mut)">Ťukni do grafu: zobrazia sa hodnoty všetkých senzorov v danom čase.</span>';return}
  const b=bloodAll.length?bloodAll.reduce((p,q)=>Math.abs(q.t-cross)<Math.abs(p.t-cross)?q:p):null;
  el.innerHTML='<span class="rt">'+dt(cross)+'</span>'
-  +withData().map(s=>{const g=near(DATA[s.id],cross,5*60e3);return '<span class="chip">'+dot(s)+s.short+' <b>'+(g?fmt(g.y):'–')+'</b></span>'}).join('')
+  +withData().map(s=>{const g=shownAt(s,cross);return '<span class="chip">'+dot(s)+s.short+' <b>'+(g?fmt(g.y):'–')+'</b></span>'}).join('')
   +(b&&Math.abs(b.t-cross)<=5*60e3?'<span class="chip"><i class="dia"></i>krv <b>'+fmt(toU(b.mg))+'</b></span>':'');
 }
 function cardsPrep(){SENS.forEach(s=>{$('a_'+s.id).textContent=s.life?'životnosť '+s.life+' dní':'\u00a0'})}
@@ -542,6 +550,7 @@ function start(){
  const head=same?'Štart testu: '+dtl(START):run.length?'Beží: '+run.map(s=>s.short+' od '+dt(s.start)).join(', '):PLAN?'Štart testu: '+PLAN:'';
  $('sub').innerHTML=(head?head+' · ':'')+'<a href="../">Prvý test (6.–20. 11. 2026)</a>';
  $('trial').hidden=!TRIAL;
+ $('sfltL').textContent='Filter '+(FLT.map(s=>s.short).join(', ')||'–')+' (graf)';$('sflt').disabled=!FLT.length;
  cardsInit();mk();$('nn').textContent=END?'Koniec':'Teraz';
  clearInterval(timer);tick();if(!END)timer=setInterval(tick,60000);
 }
@@ -565,7 +574,7 @@ $('nn').onclick=()=>{view.live=true;render()};
 })();
 $('anRef').onchange=()=>{save();analyze()};$('anWin').onchange=()=>{save();analyze()};
 $('unit').onchange=()=>{save();mk();if(RUN)refresh()};
-$('flt').onchange=()=>{save();if(chart&&RUN){setChartData();render()}};
+$('sflt').onchange=()=>{save();if(chart&&RUN){setChartData();render()}};
 $('hrs').onchange=()=>{save();render()};
 start();
 </script>
