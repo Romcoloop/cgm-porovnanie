@@ -108,6 +108,7 @@ const $=id=>document.getElementById(id);
 // ================= KONFIGURÁCIA TESTU =================
 const PROXY='https://cgm-proxy.krajcovicroman.workers.dev'; // Cloudflare Worker, ktorý drží tokeny k Nightscoutom
 const PLAN='približne 26. 11. 2026'; // text plánovaného štartu; zobrazí sa, len kým nebeží žiadny senzor ('' = bez termínu)
+const FROM=Date.UTC(2026,10,23,18,6); // dáta sa zobrazujú a rátajú až od tohto času (23. 11. 19:06 = štart GS3), aj keď senzor beží dlhšie; null = od štartu každého senzora
 const END=null;     // koniec testu v UTC; null = test beží
 const STATIC=null;  // po ukončení testu: priečinok s uloženou kópiou dát (napr. 'data'), stránka potom nečíta worker
 const BG_SRC='b';   // cesta workera, kam chodia merania z prsta (AAPS → Nightscout Dexcom G6)
@@ -138,8 +139,10 @@ const HID=new Set(Array.isArray(S.hid)?S.hid:[]);
 const NOW=()=>END||Date.now();
 // Skúšobný pohľad (?skuska=1): posledné 3 dni zo všetkých zdrojov bez ohľadu na štart senzora. Slúži na overenie, že dáta z nového zdroja tečú.
 const TRIAL=new URLSearchParams(location.search).has('skuska')&&!END;
-const T0=TRIAL?Math.floor((Date.now()-72*36e5)/60e3)*60e3:START; // od kedy sa berú dáta
-const st0=s=>TRIAL?T0:s.start;
+const floorOf=s=>Math.max(s.start,FROM||0);
+const T0=TRIAL?Math.floor((Date.now()-72*36e5)/60e3)*60e3:START==null?null:Math.min(...SENS.filter(s=>s.start).map(floorOf)); // od kedy sa berú dáta
+const st0=s=>TRIAL?T0:s.start;     // štart senzora: vek na karte, prvých 24 h
+const lo0=s=>TRIAL?T0:floorOf(s);  // odkedy sa dáta senzora zobrazujú a rátajú
 const on=s=>TRIAL||!!s.start; // senzor už beží (má štart)
 let RUN=false; // true, keď test (alebo skúška) beží a stránka zobrazuje dáta
 const mm=()=>$('unit').value==='mmol';
@@ -262,7 +265,7 @@ function bloodMerge(raw){
  const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
  return gr.map(g=>({t:Math.round(avg(g.ts)),mg:avg(g.v),v:g.v}));
 }
-const srcStart=src=>Math.min(...SENS.filter(s=>s.src===src&&on(s)).map(st0)); // najskorší štart senzora na danom zdroji
+const srcStart=src=>Math.min(...SENS.filter(s=>s.src===src&&on(s)).map(lo0)); // najskorší štart senzora na danom zdroji
 const fromFor=s=>{const lo=srcStart(s.src);return last[s.src]?Math.max(last[s.src]-60*60e3,lo):lo};
 function merge(s,arr){
  const m=cache[s.id]||(cache[s.id]=new Map());
@@ -270,7 +273,7 @@ function merge(s,arr){
 }
 function build(){ // cache (mg/dL) → DATA v zobrazovaných jednotkách, len obdobie testu daného senzora
  SENS.forEach(s=>{
-  const m=on(s)?cache[s.id]:null,lo=st0(s),hi=Math.min(s.end||Infinity,NOW());
+  const m=on(s)?cache[s.id]:null,lo=lo0(s),hi=Math.min(s.end||Infinity,NOW());
   const arr=m?[...m.entries()].filter(e=>e[0]>=lo&&e[0]<=hi).sort((a,b)=>a[0]-b[0]).map(e=>({x:e[0],y:toU(e[1])})):[];
   DATA[s.id]=arr.filter((p,i)=>!i||p.x-arr[i-1].x>30e3); // duplicity (dva uploadery)
  });
@@ -323,8 +326,8 @@ function stats(){
  const el=$('pair'),rows=[];
  const ms=d=>d.length?{n:d.length,mard:d.reduce((a,x)=>a+Math.abs(x[0]-x[1])/x[1],0)/d.length*100,bias:d.reduce((a,x)=>a+x[0]-x[1],0)/d.length}:null;
  withData().forEach(s=>{
-  const d=DATA[s.id],a=[],b=[],lo=st0(s);
-  for(const p of bloodAll){if(p.t<lo)continue;const g=near(d,p.t,5*60e3);if(g)(p.t<lo+24*36e5?b:a).push([g.y,toU(p.mg)])}
+  const d=DATA[s.id],a=[],b=[],lo=lo0(s),day1=st0(s)+24*36e5;
+  for(const p of bloodAll){if(p.t<lo)continue;const g=near(d,p.t,5*60e3);if(g)(p.t<day1?b:a).push([g.y,toU(p.mg)])}
   rows.push({s,a:ms(a),b:ms(b)});
  });
  if(!bloodAll.length||!rows.length){el.innerHTML='<span style="color:var(--mut)">Štatistika sa zobrazí, keď budú merania z prsta.</span>';return}
@@ -341,7 +344,7 @@ function bloodTable(r){
  blood.slice().reverse().forEach(p=>{
   const u=toU(p.mg);
   h+='<tr><td>'+dt(p.t)+'</td><td><b>'+fmt(u)+'</b>'+(p.v.length>1?' <small>('+p.v.map(v=>fmt(toU(v))).join(' + ')+')</small>':'')+'</td>'
-   +act.map(s=>{const g=p.t>=st0(s)?near(DATA[s.id],p.t,5*60e3):null;return '<td>'+(g?fmt(g.y)+' <small>('+sg(g.y-u)+')</small>'+(p.t<st0(s)+24*36e5?'*':''):'–')+'</td>'}).join('')+'</tr>';
+   +act.map(s=>{const g=p.t>=lo0(s)?near(DATA[s.id],p.t,5*60e3):null;return '<td>'+(g?fmt(g.y)+' <small>('+sg(g.y-u)+')</small>'+(p.t<st0(s)+24*36e5?'*':''):'–')+'</td>'}).join('')+'</tr>';
  });
  $('bList').innerHTML=h+'</table>';
 }
@@ -547,7 +550,7 @@ async function tick(){
 function start(){
  const run=SENS.filter(s=>s.start).sort((a,b)=>a.start-b.start);
  const same=run.length===SENS.length&&run.every(s=>s.start===run[0].start); // všetky senzory nasadené naraz
- const head=same?'Štart testu: '+dtl(START):run.length?'Beží: '+run.map(s=>s.short+' od '+dt(s.start)).join(', '):PLAN?'Štart testu: '+PLAN:'';
+ const head=same?'Štart testu: '+dtl(START):run.length?'Beží: '+run.map(s=>s.short+' od '+dt(s.start)).join(', ')+(!TRIAL&&T0>START?' · graf od '+dt(T0):''):PLAN?'Štart testu: '+PLAN:'';
  $('sub').innerHTML=(head?head+' · ':'')+'<a href="../">Prvý test (6.–20. 11. 2026)</a>';
  $('trial').hidden=!TRIAL;
  $('sfltL').textContent='Filter '+(FLT.map(s=>s.short).join(', ')||'–')+' (graf)';$('sflt').disabled=!FLT.length;
