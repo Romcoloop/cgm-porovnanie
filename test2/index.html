@@ -128,7 +128,9 @@ const SENS=[
 ];
 const START=SENS.some(s=>s.start)?Math.min(...SENS.filter(s=>s.start).map(s=>s.start)):null; // začiatok dát = štart prvého bežiaceho senzora; null = nebeží nič
 const REF_DEFAULT='g6';
-const NOTES=[]; // zvislé poznámky v grafe: {t:Date.UTC(...),text:'...'}
+const NOTES=[ // zvislé poznámky v grafe: {t:Date.UTC(...),text:'...'}
+ {t:Date.UTC(2026,10,25,18,26),text:'Kalibrácia G6'}, // 25. 11. 19:26
+];
 // ======================================================
 
 const MG=18.0182;
