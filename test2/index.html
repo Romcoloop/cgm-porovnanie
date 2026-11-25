@@ -124,10 +124,10 @@ const SENS=[
  {id:'gs3', name:'Sibionics GS3', short:'GS3',      color:'#59bbfb',life:14,  src:'a',flt:true,start:Date.UTC(2026,10,23,18,6)}, // prvá hodnota 23. 11. 19:06
  {id:'l2p', name:'Libre 2 Plus',  short:'Libre 2+', color:'#e8eaed',life:15,  src:'f'},
  {id:'ican',name:'iCan i5',       short:'iCan i5',  color:'#0e8f80',life:null,src:'g'},
- {id:'g6',  name:'Dexcom G6',     short:'G6',       color:'#c8741a',life:10,  src:'b',start:Date.UTC(2026,10,20,14,34)}, // prvá hodnota 20. 11. 15:34 (po 2 h zahrievaní)
+ {id:'g6',  name:'Dexcom G6',     short:'G6',       color:'#c8741a',life:10,  src:'b',start:Date.UTC(2026,10,20,14,34),end:Date.UTC(2026,10,25,19,57)}, // prvá hodnota 20. 11. 15:34 (po 2 h zahrievaní); ukončený 25. 11. 20:57, AAPS odvtedy posiela do tohto Nightscoutu GS3
 ];
 const START=SENS.some(s=>s.start)?Math.min(...SENS.filter(s=>s.start).map(s=>s.start)):null; // začiatok dát = štart prvého bežiaceho senzora; null = nebeží nič
-const REF_DEFAULT='g6';
+const REF_DEFAULT='gs3';
 const NOTES=[ // zvislé poznámky v grafe: {t:Date.UTC(...),text:'...'}
  {t:Date.UTC(2026,10,25,18,26),text:'Kalibrácia G6'}, // 25. 11. 19:26
 ];
@@ -146,6 +146,7 @@ const T0=TRIAL?Math.floor((Date.now()-72*36e5)/60e3)*60e3:START==null?null:Math.
 const st0=s=>TRIAL?T0:s.start;     // štart senzora: vek na karte, prvých 24 h
 const lo0=s=>TRIAL?T0:floorOf(s);  // odkedy sa dáta senzora zobrazujú a rátajú
 const on=s=>TRIAL||!!s.start; // senzor už beží (má štart)
+const fin=s=>!TRIAL&&!!s.end&&Date.now()>=s.end; // senzor ukončený skôr než test (má end v minulosti)
 let RUN=false; // true, keď test (alebo skúška) beží a stránka zobrazuje dáta
 const mm=()=>$('unit').value==='mmol';
 const toU=v=>mm()?v/MG:v;
@@ -502,13 +503,13 @@ function cardsPrep(){SENS.forEach(s=>{$('a_'+s.id).textContent=s.life?'životnos
 function cards(){
  const now=NOW();
  SENS.forEach(s=>{
-  const d=DATA[s.id]||[],l=d[d.length-1],days=Math.max(0,(now-st0(s))/864e5);
+  const f=fin(s),d=DATA[s.id]||[],l=d[d.length-1],days=Math.max(0,(now-st0(s))/864e5);
   $('c_'+s.id).classList.toggle('off',HID.has(s.id));$('c_'+s.id).setAttribute('aria-pressed',String(!HID.has(s.id)));
-  $('a_'+s.id).textContent=l?(TRIAL?'skúšobné dáta':num(days,1)+(s.life?' / '+s.life+' dní':' dňa')):'čaká na dáta';
-  $('a_'+s.id).style.color=l&&!TRIAL&&s.life&&days>s.life?'var(--warn)':'';
+  $('a_'+s.id).textContent=l?(TRIAL?'skúšobné dáta':f?'ukončený':num(days,1)+(s.life?' / '+s.life+' dní':' dňa')):'čaká na dáta';
+  $('a_'+s.id).style.color=l&&!TRIAL&&!f&&s.life&&days>s.life?'var(--warn)':'';
   $('v_'+s.id).textContent=l?fmt(l.y):'–';
-  const old=l&&!END&&now-l.x>15*60e3;
-  $('t_'+s.id).textContent=l?(old?'naposledy '+(now-l.x>20*36e5?dt(l.x):hm(l.x)):hm(l.x)):' ';
+  const old=l&&!END&&!f&&now-l.x>15*60e3;
+  $('t_'+s.id).textContent=l?(f?dt(l.x):old?'naposledy '+(now-l.x>20*36e5?dt(l.x):hm(l.x)):hm(l.x)):' ';
   $('t_'+s.id).style.color=old?'var(--warn)':'';
  });
  const lb=bloodAll[bloodAll.length-1];
@@ -550,9 +551,9 @@ async function tick(){
  }catch(e){$('st').textContent='Chyba: '+e.message}
 }
 function start(){
- const run=SENS.filter(s=>s.start).sort((a,b)=>a.start-b.start);
- const same=run.length===SENS.length&&run.every(s=>s.start===run[0].start); // všetky senzory nasadené naraz
- const head=same?'Štart testu: '+dtl(START):run.length?'Beží: '+run.map(s=>s.short+' od '+dt(s.start)).join(', ')+(!TRIAL&&T0>START?' · graf od '+dt(T0):''):PLAN?'Štart testu: '+PLAN:'';
+ const all=SENS.filter(s=>s.start),run=all.filter(s=>!fin(s)).sort((a,b)=>a.start-b.start),done=all.filter(fin);
+ const same=!done.length&&run.length===SENS.length&&run.every(s=>s.start===run[0].start); // všetky senzory nasadené naraz
+ const head=same?'Štart testu: '+dtl(START):all.length?[run.length?'Beží: '+run.map(s=>s.short+' od '+dt(s.start)).join(', '):'',done.length?'Ukončené: '+done.map(s=>s.short+' '+dt(s.end)).join(', '):'',!TRIAL&&T0>START?'graf od '+dt(T0):''].filter(Boolean).join(' · '):PLAN?'Štart testu: '+PLAN:'';
  $('sub').innerHTML=(head?head+' · ':'')+'<a href="../">Prvý test (6.–20. 11. 2026)</a>';
  $('trial').hidden=!TRIAL;
  $('sfltL').textContent='Filter '+(FLT.map(s=>s.short).join(', ')||'–')+' (graf)';$('sflt').disabled=!FLT.length;
