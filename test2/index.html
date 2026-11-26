@@ -30,7 +30,8 @@
  .sub a{color:#8ab4f8;white-space:nowrap}
  #trial{font-size:13px;background:#3a2e12;border:1px solid #c98500;color:#ffe2a6;border-radius:10px;padding:8px 10px;margin:8px 0}
  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px;margin:8px 0}
- .c{display:block;text-align:left;font:inherit;color:inherit;background:var(--surf);border:0;border-left:4px solid var(--k);border-radius:10px;padding:8px 10px;margin:0;width:auto;min-width:0}
+ @media(min-width:1000px){.cards{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}}
+ .c{display:block;text-align:left;font:inherit;color:inherit;background:var(--surf);border:0;border-left:4px solid var(--k);border-radius:10px;padding:8px;margin:0;width:auto;min-width:0}
  button.c{cursor:pointer}
  button.c:focus-visible{outline:2px solid #8ab4f8;outline-offset:2px}
  .c.off{opacity:.4}
@@ -123,7 +124,8 @@ const SENS=[
  {id:'syai',name:'Syai',          short:'Syai',     color:'#f89bb6',life:null,src:'e'},
  {id:'gs3', name:'Sibionics GS3', short:'GS3',      color:'#59bbfb',life:14,  src:'a',flt:true,start:Date.UTC(2026,10,23,18,6)}, // prvá hodnota 23. 11. 19:06
  {id:'l2p', name:'Libre 2 Plus',  short:'Libre 2+', color:'#e8eaed',life:15,  src:'f'},
- {id:'ican',name:'iCan i5',       short:'iCan i5',  color:'#0e8f80',life:null,src:'g'},
+ {id:'ican',name:'iCan i6',       short:'iCan i6',  color:'#0e8f80',life:null,src:'g'},
+ {id:'hippo',name:'Hippo H1',     short:'Hippo',    color:'#e640c0',life:14,  src:'h'},
  {id:'g6',  name:'Dexcom G6',     short:'G6',       color:'#c8741a',life:10,  src:'b',start:Date.UTC(2026,10,20,14,34),end:Date.UTC(2026,10,25,19,57)}, // prvá hodnota 20. 11. 15:34 (po 2 h zahrievaní); ukončený 25. 11. 20:57, AAPS odvtedy posiela do tohto Nightscoutu GS3
 ];
 const START=SENS.some(s=>s.start)?Math.min(...SENS.filter(s=>s.start).map(s=>s.start)):null; // začiatok dát = štart prvého bežiaceho senzora; null = nebeží nič
