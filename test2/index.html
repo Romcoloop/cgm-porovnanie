@@ -60,6 +60,9 @@
  .tb td,.tb th{padding:4px 8px;text-align:left;border-bottom:1px solid var(--line);font-weight:400}
  .tb th{color:var(--mut);font-size:12px}
  .tb small{color:var(--mut)}
+ .tg{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
+ .tg.off{opacity:.45}
+ .tg:focus-visible{outline:2px solid #8ab4f8;outline-offset:2px}
  .r{display:flex;gap:8px;flex-wrap:wrap}.r>div{flex:1;min-width:120px}
  label{display:block;font-size:13px;margin:6px 0 2px;color:var(--mut)}
  select{width:100%;box-sizing:border-box;padding:8px;border-radius:6px;border:1px solid #345;background:var(--bg);color:#eee;font:inherit}
@@ -70,6 +73,7 @@
 <div class="sub" id="sub"></div>
 <div id="trial" hidden><b>Skúšobný pohľad.</b> Zobrazené sú posledné 3 dni zo všetkých pripojených zdrojov, bez ohľadu na štart senzora. Do výsledkov testu sa tento pohľad neráta.</div>
 <div class="cards" id="cards"></div>
+<div class="hint" id="wait" hidden></div>
 <div id="live" hidden>
 <div class="hint">Ťuknutím na kartu senzor v grafe skryješ alebo zobrazíš.<span id="fltNote"></span></div>
 <div id="box"><canvas id="ch"></canvas></div>
@@ -101,6 +105,10 @@
  </div>
  <div class="note">Filter mení len čiaru v grafe a hodnotu odčítanú ťuknutím do grafu. MARD, tabuľka meraní z krvi aj analýza sa vždy rátajú zo surových dát.</div>
 </details>
+<details open id="endBox" hidden><summary>Ukončené senzory</summary>
+ <div class="tb" id="endT"></div>
+ <div class="note">Výsledky za obdobie, keď bol senzor v teste. MARD a odchýlka sa rátajú rovnako ako pri bežiacich senzoroch. Oneskorenie je voči referenčnému senzoru zvolenému v analýze (+ = senzor reaguje neskôr), bez prvých 24 h po nasadení. Ťuknutím na názov senzor v grafe skryješ alebo zobrazíš.</div>
+</details>
 </div>
 <script>
 window.onerror=(m,u,l)=>{const e=document.getElementById('st');if(e)e.textContent='Chyba skriptu: '+m+' (riadok '+l+')'};
@@ -117,7 +125,7 @@ const BG_SRC='b';   // cesta workera, kam chodia merania z prsta (AAPS → Night
 // start = prvá hodnota senzora po zahriatí, v UTC (Date.UTC počíta mesiace od 0, november = 10; SEČ = UTC+1).
 // Senzor bez start ešte nebeží: v zozname je, ale jeho dáta sa nesťahujú ani nezobrazujú (v tom istom Nightscoute môže dobiehať starý senzor).
 // flt:true = čiara senzora sa v grafe predvolene vyhladzuje filtrom (surové dáta ostávajú tenkou čiarou pod ňou; štatistiky sú vždy zo surových).
-// Voliteľné: end (senzor skončil skôr), dev (časť názvu "device", ak dva senzory zdieľajú jeden Nightscout).
+// Voliteľné: end (senzor skončil skôr), dev (časť názvu "device", ak dva senzory zdieľajú jeden Nightscout), sn (výrobné číslo senzora, zobrazí sa pri názve a v tabuľke ukončených).
 const SENS=[
  {id:'one', name:'Dexcom ONE+',   short:'ONE+',     color:'#8e71f5',life:10,  src:'c'},
  {id:'ins', name:'Instara',       short:'Instara',  color:'#b9e769',life:null,src:'d'},
@@ -149,6 +157,7 @@ const st0=s=>TRIAL?T0:s.start;     // štart senzora: vek na karte, prvých 24 h
 const lo0=s=>TRIAL?T0:floorOf(s);  // odkedy sa dáta senzora zobrazujú a rátajú
 const on=s=>TRIAL||!!s.start; // senzor už beží (má štart)
 const fin=s=>!TRIAL&&!!s.end&&Date.now()>=s.end; // senzor ukončený skôr než test (má end v minulosti)
+const live=s=>on(s)&&!fin(s); // senzor práve beží; ukončené majú výsledky v tabuľke dolu
 let RUN=false; // true, keď test (alebo skúška) beží a stránka zobrazuje dáta
 const mm=()=>$('unit').value==='mmol';
 const toU=v=>mm()?v/MG:v;
@@ -230,10 +239,18 @@ function mk(){
            y:{suggestedMin:mm()?2:40,suggestedMax:mm()?16:300,ticks:{color:'#9aa7b0'},grid:{color:'#222b36'}}},
    plugins:{legend:{display:false},tooltip:{enabled:false}}}});
 }
-function cardsInit(){
- $('cards').innerHTML=SENS.map(s=>'<button type="button" class="c" id="c_'+s.id+'" style="--k:'+s.color+'" title="Skryť alebo zobraziť v grafe"><span class="n">'+s.name+'</span><span id="a_'+s.id+'">&nbsp;</span><b id="v_'+s.id+'">–</b><span id="t_'+s.id+'">&nbsp;</span></button>').join('')
+let cardKey=null;
+function toggle(id){HID.has(id)?HID.delete(id):HID.add(id);save();if(chart){setChartData();render();endedDraw()}}
+function cardsSync(){ // karty hore: počas testu len bežiace senzory, pred štartom všetky plánované; vráti zoznam senzorov s kartou
+ const list=RUN?SENS.filter(live):SENS,key=(RUN?'r:':'p:')+list.map(s=>s.id).join();
+ if(key===cardKey)return list;
+ cardKey=key;
+ $('cards').innerHTML=list.map(s=>'<button type="button" class="c" id="c_'+s.id+'" style="--k:'+s.color+'" title="Skryť alebo zobraziť v grafe"><span class="n">'+s.name+'</span><span id="a_'+s.id+'">&nbsp;</span><b id="v_'+s.id+'">–</b><span id="t_'+s.id+'">&nbsp;</span></button>').join('')
   +'<div class="c" style="--k:#ff2d2d"><span class="n"><i class="dia"></i>Krv z prsta</span><span id="a_bg">&nbsp;</span><b id="v_bg">–</b><span id="t_bg">&nbsp;</span></div>';
- SENS.forEach(s=>{$('c_'+s.id).onclick=()=>{HID.has(s.id)?HID.delete(s.id):HID.add(s.id);save();if(chart){setChartData();render()}}});
+ list.forEach(s=>{$('c_'+s.id).onclick=()=>toggle(s.id)});
+ const w=RUN?SENS.filter(s=>!on(s)):[];
+ $('wait').hidden=!w.length;$('wait').textContent=w.length?'Čakajú na nasadenie: '+w.map(s=>s.name).join(', ')+'.':'';
+ return list;
 }
 
 // ---------- načítanie dát ----------
@@ -327,23 +344,24 @@ function near(arr,t,w){ // arr zoradené podľa x; najbližší bod do vzdialeno
 }
 
 // ---------- presnosť voči krvi ----------
-function stats(){
- const el=$('pair'),rows=[];
+function mardOf(s){ // a = bez prvých 24 h, b = prvých 24 h
  const ms=d=>d.length?{n:d.length,mard:d.reduce((a,x)=>a+Math.abs(x[0]-x[1])/x[1],0)/d.length*100,bias:d.reduce((a,x)=>a+x[0]-x[1],0)/d.length}:null;
- withData().forEach(s=>{
-  const d=DATA[s.id],a=[],b=[],lo=lo0(s),day1=st0(s)+24*36e5;
-  for(const p of bloodAll){if(p.t<lo)continue;const g=near(d,p.t,5*60e3);if(g)(p.t<day1?b:a).push([g.y,toU(p.mg)])}
-  rows.push({s,a:ms(a),b:ms(b)});
- });
+ const d=DATA[s.id]||[],a=[],b=[],lo=lo0(s),day1=st0(s)+24*36e5;
+ for(const p of bloodAll){if(p.t<lo)continue;const g=near(d,p.t,5*60e3);if(g)(p.t<day1?b:a).push([g.y,toU(p.mg)])}
+ return{a:ms(a),b:ms(b)};
+}
+const snTxt=s=>s.sn?' <small>v. č. '+s.sn+'</small>':'';
+function stats(){
+ const el=$('pair'),rows=withData().filter(live).map(s=>Object.assign({s},mardOf(s)));
  if(!bloodAll.length||!rows.length){el.innerHTML='<span style="color:var(--mut)">Štatistika sa zobrazí, keď budú merania z prsta.</span>';return}
  let h='<table><tr><th>Senzor</th><th>MARD</th><th>Ø odchýlka</th><th>Počet meraní</th><th>Prvých 24 h<br><small>MARD (počet)</small></th></tr>';
  rows.forEach(r=>{
-  h+='<tr><td>'+dot(r.s)+r.s.name+'</td><td>'+(r.a?'<b>'+num(r.a.mard,1)+' %</b>':'–')+'</td><td>'+(r.a?sg(r.a.bias):'–')+'</td><td>'+(r.a?r.a.n:0)+'</td><td>'+(r.b?num(r.b.mard,1)+' % ('+r.b.n+')':'–')+'</td></tr>';
+  h+='<tr><td>'+dot(r.s)+r.s.name+snTxt(r.s)+'</td><td>'+(r.a?'<b>'+num(r.a.mard,1)+' %</b>':'–')+'</td><td>'+(r.a?sg(r.a.bias):'–')+'</td><td>'+(r.a?r.a.n:0)+'</td><td>'+(r.b?num(r.b.mard,1)+' % ('+r.b.n+')':'–')+'</td></tr>';
  });
  el.innerHTML=h+'</table>';
 }
 function bloodTable(r){
- const act=withData(),blood=bloodAll.filter(p=>p.t>=r.start&&p.t<=r.end);
+ const act=withData().filter(s=>live(s)||near(DATA[s.id],(r.start+r.end)/2,(r.end-r.start)/2)),blood=bloodAll.filter(p=>p.t>=r.start&&p.t<=r.end); // ukončený senzor len v období, keď mal dáta
  if(!blood.length){$('bList').innerHTML='<span style="color:var(--mut)">V zobrazenom období nie sú žiadne merania z prsta.</span>';return}
  let h='<table><tr><th>Čas</th><th><i class="dia"></i>Krv</th>'+act.map(s=>'<th>'+dot(s)+s.short+'</th>').join('')+'</tr>';
  blood.slice().reverse().forEach(p=>{
@@ -429,8 +447,9 @@ function anCross(v,ev){ // minúta, kedy rad prekročí 50 % vlastnej zmeny poč
 const med=a=>{if(!a.length)return NaN;const s=[...a].sort((x,y)=>x-y),h=s.length>>1;return s.length%2?s[h]:(s[h-1]+s[h])/2};
 const lagTxt=r=>r?(r.L>0?'+':r.L<0?'−':'')+Math.abs(r.L)+' min':'–';
 const minTxt=v=>{const r=Math.round(v);return (r>0?'+':r<0?'−':'')+Math.abs(r)+' min'};
-function refOptions(){ // ponuka referenčného senzora = senzory, ktoré majú dáta
- const act=withData(),el=$('anRef'),key=act.map(s=>s.id).join();
+const anPool=()=>{const a=withData(),l=a.filter(live);return l.length?l:a}; // analýza porovnáva bežiace senzory; ak už nebeží žiadny, všetky s dátami
+function refOptions(){ // ponuka referenčného senzora = bežiace senzory, ktoré majú dáta
+ const act=anPool(),el=$('anRef'),key=act.map(s=>s.id).join();
  if(el.dataset.key===key)return;
  const want=el.value||S.anRef||REF_DEFAULT;
  el.innerHTML=act.map(s=>'<option value="'+s.id+'">'+s.name+'</option>').join('');
@@ -441,8 +460,8 @@ function analyze(){
  const out=$('anOut');
  try{
   refOptions();
-  const act=withData();
-  if(act.length<2){out.innerHTML='<span style="color:var(--mut)">Na analýzu treba dáta aspoň z dvoch senzorov.</span>';return}
+  const act=anPool();
+  if(act.length<2){out.innerHTML='<span style="color:var(--mut)">Na analýzu treba dáta aspoň z dvoch bežiacich senzorov.'+(SENS.some(fin)?' Výsledky ukončených senzorov sú v tabuľke dolu.':'')+'</span>';return}
   const ref=act.find(s=>s.id===$('anRef').value)||act[0],others=act.filter(s=>s!==ref);
   const now=NOW(),w=$('anWin').value;
   let t0=w==='all'?T0:now-(+w)*36e5;t0=Math.floor(Math.max(t0,T0,now-21*864e5)/60e3)*60e3;
@@ -485,6 +504,42 @@ function analyze(){
  }catch(e){out.textContent='Chyba analýzy: '+e.message}
 }
 
+// ---------- ukončené senzory: výsledky za obdobie, keď boli v teste ----------
+let ENDROWS=[];
+function endedCalc(){
+ const ref=SENS.find(s=>s.id===$('anRef').value&&has(s.id))||null;
+ ENDROWS=SENS.filter(s=>on(s)&&fin(s)).map(s=>{
+  const r={s,m:mardOf(s),ref:null,all:null,up:null,dn:null};
+  try{
+   if(ref&&ref!==s&&has(s.id)){ // oneskorenie voči referencii za celé spoločné obdobie (rovnaký výpočet ako v analýze)
+    const t0=Math.floor(Math.max(T0,lo0(s),lo0(ref))/60e3)*60e3,n=Math.floor((Math.min(s.end,NOW())-t0)/60e3)+1;
+    if(n>120){
+     const R=anSeries(ref,t0,n),O=anSeries(s,t0,n),sl=anSlope(R),rise=new Uint8Array(n),fall=new Uint8Array(n);
+     for(let m=0;m<n;m++){if(sl[m]>AN_THR)rise[m]=1;else if(sl[m]<-AN_THR)fall[m]=1}
+     r.ref=ref;r.all=anLag(R,O,null,120);r.up=anLag(R,O,rise,30);r.dn=anLag(R,O,fall,30);
+    }
+   }
+  }catch(e){}
+  return r;
+ });
+ endedDraw();
+}
+function endedDraw(){
+ $('endBox').hidden=!ENDROWS.length;if(!ENDROWS.length)return;
+ const anySn=ENDROWS.some(r=>r.s.sn),ref=(ENDROWS.find(r=>r.ref)||{}).ref;
+ let h='<table><tr><th>Senzor</th>'+(anySn?'<th>Výrobné číslo</th>':'')+'<th>Nasadený – ukončený</th><th>Dní</th><th>MARD</th><th>Ø odchýlka</th><th>Počet meraní</th><th>Prvých 24 h<br><small>MARD (počet)</small></th><th>Oneskorenie'+(ref?' voči '+ref.short:'')+'<br><small>celkom (nárast / pád)</small></th></tr>';
+ ENDROWS.forEach(r=>{
+  const s=r.s,a=r.m.a,b=r.m.b,off=HID.has(s.id);
+  h+='<tr><td><button type="button" class="tg'+(off?' off':'')+'" data-id="'+s.id+'" aria-pressed="'+!off+'" title="Skryť alebo zobraziť v grafe">'+dot(s)+s.name+'</button></td>'
+   +(anySn?'<td>'+(s.sn||'–')+'</td>':'')
+   +'<td>'+dt(s.start)+' – '+dt(s.end)+(lo0(s)>s.start?'<br><small>dáta v teste od '+dt(lo0(s))+'</small>':'')+'</td>'
+   +'<td>'+num((s.end-s.start)/864e5,1)+(s.life?' / '+s.life:'')+'</td>'
+   +'<td>'+(a?'<b>'+num(a.mard,1)+' %</b>':'–')+'</td><td>'+(a?sg(a.bias):'–')+'</td><td>'+(a?a.n:0)+'</td><td>'+(b?num(b.mard,1)+' % ('+b.n+')':'–')+'</td>'
+   +'<td>'+(r.all?'<b>'+lagTxt(r.all)+'</b> <small>('+lagTxt(r.up)+' / '+lagTxt(r.dn)+')</small>':'–')+'</td></tr>';
+ });
+ $('endT').innerHTML=h+'</table>';
+}
+
 // ---------- zobrazenie ----------
 const W=()=>(+$('hrs').value||6)*36e5;
 function viewRange(){
@@ -498,13 +553,13 @@ function readout(){ // hodnoty všetkých senzorov vo zvolenom čase
  if(cross==null){el.innerHTML='<span style="color:var(--mut)">Ťukni do grafu: zobrazia sa hodnoty všetkých senzorov v danom čase.</span>';return}
  const b=bloodAll.length?bloodAll.reduce((p,q)=>Math.abs(q.t-cross)<Math.abs(p.t-cross)?q:p):null;
  el.innerHTML='<span class="rt">'+dt(cross)+'</span>'
-  +withData().map(s=>{const g=shownAt(s,cross);return '<span class="chip">'+dot(s)+s.short+' <b>'+(g?fmt(g.y):'–')+'</b></span>'}).join('')
+  +withData().map(s=>{const g=shownAt(s,cross);return !g&&fin(s)?'':'<span class="chip">'+dot(s)+s.short+' <b>'+(g?fmt(g.y):'–')+'</b></span>'}).join('')
   +(b&&Math.abs(b.t-cross)<=5*60e3?'<span class="chip"><i class="dia"></i>krv <b>'+fmt(toU(b.mg))+'</b></span>':'');
 }
-function cardsPrep(){SENS.forEach(s=>{$('a_'+s.id).textContent=s.life?'životnosť '+s.life+' dní':'\u00a0'})}
+function cardsPrep(){cardsSync().forEach(s=>{$('a_'+s.id).textContent=s.life?'životnosť '+s.life+' dní':'\u00a0'})}
 function cards(){
  const now=NOW();
- SENS.forEach(s=>{
+ cardsSync().forEach(s=>{
   const f=fin(s),d=DATA[s.id]||[],l=d[d.length-1],days=Math.max(0,(now-st0(s))/864e5);
   $('c_'+s.id).classList.toggle('off',HID.has(s.id));$('c_'+s.id).setAttribute('aria-pressed',String(!HID.has(s.id)));
   $('a_'+s.id).textContent=l?(TRIAL?'skúšobné dáta':f?'ukončený':num(days,1)+(s.life?' / '+s.life+' dní':' dňa')):'čaká na dáta';
@@ -528,7 +583,7 @@ function render(fromSlider){
 }
 const sched=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;render()})};
 function save(){try{F.forEach(f=>S[f]=$(f).value);S.anRef=$('anRef').value;S.hid=[...HID];localStorage.setItem('cgm2',JSON.stringify(S))}catch(e){}}
-function refresh(){build();setChartData();stats();analyze();render()} // prepočet z načítaných dát, bez sťahovania
+function refresh(){build();setChartData();stats();analyze();endedCalc();render()} // prepočet z načítaných dát, bez sťahovania
 
 async function tick(){
  try{
@@ -536,7 +591,7 @@ async function tick(){
    RUN=false;$('st').textContent=START?'Test sa začne '+dtl(START)+'.':PLAN?'Test sa začne '+PLAN+'.':'Test sa pripravuje, senzory ešte nie sú nasadené.';
    $('live').hidden=true;$('st').className='big';cardsPrep();return;
   }
-  RUN=true;if($('live').hidden){$('live').hidden=false;$('st').className='';chart.resize()}
+  RUN=true;cardsSync();if($('live').hidden){$('live').hidden=false;$('st').className='';chart.resize()}
   const t0=NOW(),bySrc={},errs=[],wait=[];
   const act=SENS.filter(on);
   act.forEach(s=>{if(!bySrc[s.src])bySrc[s.src]=getSgv(s.src,fromFor(s))});
@@ -555,11 +610,11 @@ async function tick(){
 function start(){
  const all=SENS.filter(s=>s.start),run=all.filter(s=>!fin(s)).sort((a,b)=>a.start-b.start),done=all.filter(fin);
  const same=!done.length&&run.length===SENS.length&&run.every(s=>s.start===run[0].start); // všetky senzory nasadené naraz
- const head=same?'Štart testu: '+dtl(START):all.length?[run.length?'Beží: '+run.map(s=>s.short+' od '+dt(s.start)).join(', '):'',done.length?'Ukončené: '+done.map(s=>s.short+' '+dt(s.end)).join(', '):'',!TRIAL&&T0>START?'graf od '+dt(T0):''].filter(Boolean).join(' · '):PLAN?'Štart testu: '+PLAN:'';
+ const head=same?'Štart testu: '+dtl(START):all.length?[run.length?'Beží: '+run.map(s=>s.short+' od '+dt(s.start)).join(', '):'',done.length?'<a href="#endBox">Ukončené senzory: '+done.length+'</a>':'',!TRIAL&&T0>START?'graf od '+dt(T0):''].filter(Boolean).join(' · '):PLAN?'Štart testu: '+PLAN:'';
  $('sub').innerHTML=(head?head+' · ':'')+'<a href="../">Prvý test (6.–20. 11. 2026)</a>';
  $('trial').hidden=!TRIAL;
  $('sfltL').textContent='Filter '+(FLT.map(s=>s.short).join(', ')||'–')+' (graf)';$('sflt').disabled=!FLT.length;
- cardsInit();mk();$('nn').textContent=END?'Koniec':'Teraz';
+ cardsSync();mk();$('nn').textContent=END?'Koniec':'Teraz';
  clearInterval(timer);tick();if(!END)timer=setInterval(tick,60000);
 }
 
@@ -580,7 +635,8 @@ $('nn').onclick=()=>{view.live=true;render()};
  cv.addEventListener('pointerup',e=>{if(d&&!d.moved)setCross(e);d=null});
  cv.addEventListener('pointercancel',()=>{d=null});
 })();
-$('anRef').onchange=()=>{save();analyze()};$('anWin').onchange=()=>{save();analyze()};
+$('anRef').onchange=()=>{save();analyze();endedCalc()};$('anWin').onchange=()=>{save();analyze()};
+$('endT').onclick=e=>{const b=e.target.closest('button[data-id]');if(b)toggle(b.dataset.id)};
 $('unit').onchange=()=>{save();mk();if(RUN)refresh()};
 $('sflt').onchange=()=>{save();if(chart&&RUN){setChartData();render()}};
 $('hrs').onchange=()=>{save();render()};
